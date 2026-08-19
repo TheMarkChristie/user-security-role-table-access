@@ -1,0 +1,52 @@
+{
+  "name": "user-security-role-table-access",
+  "version": "1.0.0",
+  "displayName": "User Security Role Table Access",
+  "description": "See exactly what everyone in your Dataverse environment can do, and change it in bulk. Lists every user with the security roles they have, showing which ones were given to them directly and which they picked up from a team. For any user it works out what that actually means in practice: which tables they can create, read, edit, delete, assign and share records in, at what level, and which protected columns they can see. Then it copies that setup onto other people - security roles, column security profiles, team membership and business unit - showing you exactly what will change before anything is saved. You need the System Administrator role to use it.",
+  "main": "index.html",
+  "icon": "icon.svg",
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "author": "Mark Christie (https://github.com/TheMarkChristie)",
+  "contributors": [
+    {
+      "name": "Mark Christie",
+      "url": "https://github.com/TheMarkChristie"
+    }
+  ],
+  "keywords": [
+    "dataverse",
+    "dynamics-365",
+    "power-platform",
+    "security",
+    "security-roles",
+    "column-security",
+    "field-level-security",
+    "privileges",
+    "permissions",
+    "users",
+    "teams",
+    "business-units",
+    "audit",
+    "governance"
+  ],
+  "homepage": "https://github.com/TheMarkChristie/user-security-role-table-access#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheMarkChristie/user-security-role-table-access.git"
+  },
+  "configurations": {
+    "repository": "https://github.com/TheMarkChristie/user-security-role-table-access",
+    "website": "https://github.com/TheMarkChristie/user-security-role-table-access#readme",
+    "readmeUrl": "https://raw.githubusercontent.com/TheMarkChristie/user-security-role-table-access/main/README.md"
+  },
+  "features": {
+    "multiConnection": "optional",
+    "minAPI": "1.2.2"
+  },
+  "scripts": {
+    "build": "node build.js"
+  }
+}

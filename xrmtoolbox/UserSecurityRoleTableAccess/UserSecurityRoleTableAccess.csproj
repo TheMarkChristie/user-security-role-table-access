@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    XrmToolBox plugin: User Security Role Table Access.
+    Thin WebView2 host around the shared prx3_UserSecurityRoleTableAccess.html.
+    Targets .NET Framework 4.8 (required by XrmToolBox).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>UserSecurityRoleTableAccess</AssemblyName>
+    <RootNamespace>UserSecurityRoleTableAccess</RootNamespace>
+    <Product>User Security Role Table Access</Product>
+    <Company>Mark Christie</Company>
+    <Authors>Mark Christie</Authors>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- XrmToolBox plugin SDK + Dataverse client -->
+    <PackageReference Include="XrmToolBoxPackage" Version="1.2025.7.71" />
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="1.1.32" />
+    <!-- Embedded Chromium for hosting the HTML app (match XrmToolBoxPackage's WebView2) -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
+  </ItemGroup>
+
+  <!-- Copy the canonical single-file app into app/index.html before each build.
+       The HTML self-themes to Windows 95 at runtime via body[data-host="xtb"],
+       so there is no separate skinning step to drift out of sync. -->
+  <Target Name="BuildApp" BeforeTargets="BeforeBuild">
+    <Exec Command="node &quot;$(MSBuildProjectDirectory)/../build-app.js&quot;" ContinueOnError="true" />
+  </Target>
+
+  <ItemGroup>
+    <!-- ship the app HTML next to the dll so WebView2 can load it -->
+    <None Include="app\index.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,3183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Security Role Table Access</title>
+<!--
+  User Security Role Table Access — by Mark Christie.
+
+  Audit who can do what in Dataverse: list every active user with the security roles they hold
+  directly and inherit from teams, see the effective Create/Read/Write/Delete/Append/AppendTo/
+  Assign/Share depth their stacked roles give them on every table, then copy one user's roles
+  onto one or many others with business-unit-aware role matching and a preview before anything
+  is written.
+
+  ONE FILE, THREE HOSTS. The host is detected at runtime and body[data-host] is set:
+    pptb  Power Platform ToolBox   window.dataverseAPI   (dark theme)
+    xtb   XrmToolBox WebView2      window.XTB_CONFIG     (Windows 95 theme)
+    web   D365 web resource        Xrm / same-origin     (light theme)
+
+  API NOTES (verified against Microsoft Learn + a live org, Aug 2026) — see docs/ARCHITECTURE.md:
+   * Effective depth is computed from the user's roles, NOT from RetrieveUserPrivileges, which
+     has a documented defect: it reports Basic depth for every team-inherited privilege.
+   * Per-role privileges come from RetrieveRolePrivilegesRole(RoleId=...), an UNBOUND function
+     (no Microsoft.Dynamics.CRM. prefix) that returns Depth as an enum NAME, sidestepping the
+     undocumented privilegedepthmask integers.
+   * The privilege -> table map comes from EntityDefinitions?$select=LogicalName,Privileges.
+     Privileges is a PROPERTY, so it must be $select-ed and never $expand-ed. Metadata queries
+     are not paged.
+   * A role exists once per business unit. Equivalence across BUs is resolved on roletemplateid
+     first (constant everywhere, but only set on the OOB roles) then parentrootroleid.
+-->
+<style>
+/* ============================================================================
+   One stylesheet, three hosts. Every colour, radius, border and font is a token;
+   the three host palettes rebind the tokens and the layout below never changes.
+   Every palette is checked for WCAG 2.1 AA contrast, and permission depth is
+   never encoded by colour alone — each cell carries a letter and a label.
+   ============================================================================ */
+
+/* ---------- light (default: D365 web resource / standalone) ---------- */
+:root{
+  color-scheme:light;
+  --bg:#faf9f8; --card:#fff; --card2:#f3f2f1; --line:#e1dfdd; --line2:#edebe9;
+  --ink:#201f1e; --ink2:#56545a; --ink3:#6e6c6a;
+  --brand:#0f6cbd; --brand-ink:#fff; --brand-hover:#115ea3; --brand-soft:#eff6fc;
+  --ok:#0e6b0e; --ok-bg:#e8f5e8; --ok-line:#9fd89f;
+  --warn:#7a4d05; --warn-bg:#fff4ce; --warn-line:#f2c661;
+  --danger:#a4262c; --danger-bg:#fdf3f4; --danger-line:#f1bbbc;
+  --info-bg:#eff6fc; --info-line:#b4d6fa;
+  --field-bg:#fff; --field-ink:#201f1e; --field-border:1px solid #8a8886;
+  --btn-bg:#fff; --btn-ink:#201f1e; --btn-border:1px solid #8a8886; --btn-hover:#f3f2f1; --btn-active:#edebe9;
+  --th-bg:#f3f2f1; --row-hover:#f3f9fd; --row-sel:#dceefb; --row-sel-ink:#201f1e; --row-zebra:#fbfbfa;
+  --radius:6px; --radius-sm:4px; --radius-pill:999px;
+  --font:"Segoe UI",-apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --shadow:0 1.6px 3.6px rgba(0,0,0,.12),0 .3px .9px rgba(0,0,0,.1);
+  --focus:#0f6cbd; --titlebar-bg:transparent; --titlebar-ink:#201f1e; --bevel:none;
+  --d1-bg:#dceefb; --d1-ink:#0b3d66; --d2-bg:#9ecdf5; --d2-ink:#0b3d66;
+  --d3-bg:#4a9ee8; --d3-ink:#04223a; --d4-bg:#0f6cbd; --d4-ink:#fff;
+  --df-bg:#fff4ce; --df-ink:#5c3a04; --d0-ink:#56545a;
+}
+/* ---------- dark (Power Platform ToolBox opens dark) ---------- */
+body[data-host="pptb"]{
+  color-scheme:dark;
+  --bg:#1b1a19; --card:#252423; --card2:#2f2e2d; --line:#3b3a39; --line2:#323130;
+  --ink:#f3f2f1; --ink2:#b3b0ad; --ink3:#a19f9d;
+  --brand:#479ef5; --brand-ink:#06243d; --brand-hover:#62aef7; --brand-soft:#10243a;
+  --ok:#92e892; --ok-bg:#123312; --ok-line:#2c6e2c;
+  --warn:#ffd279; --warn-bg:#3a2f10; --warn-line:#7a6220;
+  --danger:#ff909a; --danger-bg:#3a1d20; --danger-line:#7d3b41;
+  --info-bg:#102a3f; --info-line:#23456a;
+  --field-bg:#1f1e1d; --field-ink:#f3f2f1; --field-border:1px solid #605e5c;
+  --btn-bg:#2f2e2d; --btn-ink:#f3f2f1; --btn-border:1px solid #605e5c; --btn-hover:#3b3a39; --btn-active:#444341;
+  --th-bg:#2f2e2d; --row-hover:#2c3a48; --row-sel:#10314f; --row-sel-ink:#f3f2f1; --row-zebra:#222120;
+  --shadow:0 1.6px 3.6px rgba(0,0,0,.4),0 .3px .9px rgba(0,0,0,.3); --focus:#479ef5;
+  /* var() in a custom property resolves where it is DECLARED, so every palette must restate these */
+  --titlebar-bg:transparent; --titlebar-ink:#f3f2f1; --bevel:none;
+  --d1-bg:#10314f; --d1-ink:#cfe4fa; --d2-bg:#1c517f; --d2-ink:#e6f2fd;
+  --d3-bg:#2a72b0; --d3-ink:#ffffff; --d4-bg:#62aef7; --d4-ink:#04223a;
+  --df-bg:#3a2f10; --df-ink:#ffd279; --d0-ink:#b3b0ad;
+}
+/* ---------- Windows 95 (XrmToolBox) ---------- */
+body[data-host="xtb"]{
+  color-scheme:light;
+  --bg:#008080; --card:#c0c0c0; --card2:#c0c0c0; --line:#808080; --line2:#dfdfdf;
+  --ink:#000; --ink2:#303030; --ink3:#404040;
+  --brand:#000080; --brand-ink:#fff; --brand-hover:#1084d0; --brand-soft:#d8d8f0;
+  --ok:#006000; --ok-bg:#dfffdf; --ok-line:#008000;
+  --warn:#6b5600; --warn-bg:#fcfca8; --warn-line:#808000;
+  --danger:#800000; --danger-bg:#ffdede; --danger-line:#a00000;
+  --info-bg:#fff; --info-line:#808080;
+  --field-bg:#fff; --field-ink:#000; --field-border:2px inset #c0c0c0;
+  --btn-bg:#c0c0c0; --btn-ink:#000; --btn-border:2px outset #c0c0c0; --btn-hover:#c8c8c8; --btn-active:#c0c0c0;
+  --th-bg:#c0c0c0; --row-hover:#e8e8e8; --row-sel:#000080; --row-sel-ink:#fff; --row-zebra:#f4f4f4;
+  --radius:0px; --radius-sm:0px; --radius-pill:0px;
+  --font:"MS Sans Serif",Tahoma,"Segoe UI",sans-serif; --font-mono:"Courier New",monospace;
+  --shadow:2px 2px 0 rgba(0,0,0,.35); --focus:#000;
+  --titlebar-bg:#000080; --titlebar-ink:#fff; --bevel:2px outset #c0c0c0;
+  --d1-bg:#d8d8f0; --d1-ink:#000; --d2-bg:#a8a8e0; --d2-ink:#000;
+  --d3-bg:#5a5ac0; --d3-ink:#fff; --d4-bg:#000080; --d4-ink:#fff;
+  --df-bg:#fcfca8; --df-ink:#000; --d0-ink:#303030;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.hidden{display:none !important}
+.wrap{max-width:1600px;margin:0 auto;padding:14px 16px 40px}
+body[data-host="xtb"] .wrap{max-width:none;padding:10px;background:var(--card);min-height:100%;
+  border:2px outset #c0c0c0}
+
+/* focus — never removed, always visible */
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+body[data-host="xtb"] :focus-visible{outline:2px dotted #000;outline-offset:1px}
+
+/* header - one compact line; the hosts all show the connection themselves */
+header.app{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;
+  background:var(--titlebar-bg);border:var(--bevel);padding:0}
+body[data-host="xtb"] header.app{padding:3px 6px;margin-bottom:8px}
+h1{font-size:15.5px;font-weight:600;margin:0;color:var(--titlebar-ink);white-space:nowrap}
+body[data-host="xtb"] h1{font-size:12.5px;font-weight:bold}
+.byline{color:var(--ink2);font-size:11.5px;white-space:nowrap}
+.needsadmin{color:var(--warn);font-weight:600}
+body[data-host="xtb"] .needsadmin{color:#ffe680}
+body[data-host="xtb"] .byline{color:#dfdfff}
+.connline{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink2);
+  min-width:0;overflow:hidden;white-space:nowrap}
+.connline .mono{overflow:hidden;text-overflow:ellipsis}
+body[data-host="xtb"] .connline{display:none}
+.hicon{width:22px;height:22px;flex:none}
+body[data-host="xtb"] .hicon{width:16px;height:16px}
+.grow{flex:1 1 auto}
+header.app button.subtle{flex:none}
+body[data-host="xtb"] header.app button.subtle{color:#dfdfff}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;
+  margin-bottom:14px;box-shadow:var(--shadow)}
+body[data-host="xtb"] .card{border:var(--bevel);box-shadow:none}
+.card h2{font-size:14.5px;font-weight:600;margin:0 0 8px}
+body[data-host="xtb"] .card h2{background:var(--brand);color:#fff;margin:-12px -12px 10px;padding:3px 7px;font-size:12px}
+.card .desc{color:var(--ink2);font-size:12.5px;margin:0 0 10px;max-width:90ch}
+
+/* tabs */
+[role=tablist]{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:14px}
+[role=tab]{appearance:none;font:inherit;cursor:pointer;background:transparent;color:var(--ink2);
+  border:1px solid transparent;border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;
+  padding:8px 14px;margin-bottom:-1px;font-weight:600;font-size:13.5px}
+[role=tab]:hover{color:var(--ink);background:var(--card2)}
+[role=tab][aria-selected=true]{background:var(--card);color:var(--brand);border-color:var(--line);border-bottom:1px solid var(--card)}
+body[data-host="xtb"] [role=tab]{border:var(--bevel);margin:0 2px -1px 0;background:var(--card)}
+body[data-host="xtb"] [role=tab][aria-selected=true]{border-bottom-color:var(--card);font-weight:bold;color:var(--ink)}
+[role=tab] .cnt{font-weight:400;color:var(--ink3);font-size:12px}
+
+/* controls */
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.spaced{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.field{display:flex;flex-direction:column;gap:4px;min-width:170px}
+.field.wide{flex:1 1 260px}
+.field>label{font-weight:600;font-size:12.5px}
+.hint{color:var(--ink2);font-size:12px}
+input[type=text],input[type=search],select,textarea{font:inherit;font-size:13px;padding:5px 7px;background:var(--field-bg);
+  color:var(--field-ink);border:var(--field-border);border-radius:var(--radius-sm);width:100%}
+input[type=checkbox],input[type=radio]{accent-color:var(--brand);width:15px;height:15px;margin:0}
+button{font:inherit;font-size:13px;cursor:pointer;background:var(--btn-bg);color:var(--btn-ink);border:var(--btn-border);
+  border-radius:var(--radius-sm);padding:6px 13px;font-weight:600}
+button:hover:not(:disabled){background:var(--btn-hover)}
+button:active:not(:disabled){background:var(--btn-active)}
+body[data-host="xtb"] button{min-width:88px}
+body[data-host="xtb"] button:active:not(:disabled){border-style:inset}
+button:disabled{opacity:.55;cursor:not-allowed}
+button.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+button.primary:hover:not(:disabled){background:var(--brand-hover)}
+body[data-host="xtb"] button.primary{background:var(--btn-bg);color:var(--ink);border:var(--btn-border);font-weight:bold}
+button.danger{border-color:var(--danger);color:var(--danger)}
+button.subtle{background:transparent;border-color:transparent;color:var(--brand);font-weight:400;padding:4px 6px;text-decoration:underline}
+body[data-host="xtb"] button.subtle{background:transparent;border:1px solid transparent;color:#00f;min-width:0}
+label.inline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer}
+
+/* badges */
+.badge{display:inline-block;padding:1px 7px;border-radius:var(--radius-pill);font-size:11px;font-weight:600;
+  background:var(--card2);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
+body[data-host="xtb"] .badge{border:1px solid var(--line);background:var(--card2)}
+.badge.brand{background:var(--brand-soft);color:var(--brand);border-color:var(--info-line)}
+.badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+.badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
+.badge.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
+body[data-host="xtb"] .badge.brand{background:var(--brand);color:#fff}
+body[data-host="xtb"] .badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+body[data-host="xtb"] .badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
+body[data-host="xtb"] .badge.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
+
+/* banners */
+.bar{margin:8px 0;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--info-line);background:var(--info-bg);font-size:12.5px}
+.bar.ok{background:var(--ok-bg);border-color:var(--ok-line)}
+.bar.warn{background:var(--warn-bg);border-color:var(--warn-line)}
+.bar.error{background:var(--danger-bg);border-color:var(--danger-line)}
+.bar b{display:block;margin-bottom:2px}
+body[data-host="xtb"] .bar{border:2px inset #c0c0c0}
+
+/* progress */
+.prog{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:var(--radius-pill);overflow:hidden;margin-top:5px}
+body[data-host="xtb"] .prog{height:16px;border:2px inset #c0c0c0;border-radius:0}
+.prog>i{display:block;height:100%;background:var(--brand);width:0;transition:width .18s linear}
+.loader{display:flex;gap:9px;align-items:center;padding:8px 10px;background:var(--card2);border:1px solid var(--line);
+  border-radius:var(--radius-sm);margin:8px 0;font-size:12.5px}
+.spinner{width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+  animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}}
+
+/* tables */
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--card);max-height:60vh}
+body[data-host="xtb"] .scroll{border:2px inset #c0c0c0;border-radius:0;background:#fff}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+th{position:sticky;top:0;z-index:2;background:var(--th-bg);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--line)}
+body[data-host="xtb"] th{border:var(--bevel);border-bottom-width:2px}
+tbody tr:nth-child(even){background:var(--row-zebra)}
+tbody tr:hover{background:var(--row-hover)}
+tbody tr.sel{background:var(--row-sel)!important;color:var(--row-sel-ink)}
+tbody tr.sel .muted,tbody tr.sel .hint{color:inherit;opacity:.85}
+tbody tr.sel button.subtle{color:var(--row-sel-ink)}
+body[data-host="xtb"] tbody tr.sel button.subtle{color:var(--row-sel-ink)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--ink2)}
+.mono{font-family:var(--font-mono);font-size:11.5px}
+.nowrap{white-space:nowrap}
+.clickable{cursor:pointer}
+th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none}
+th.sortable:hover{color:var(--brand)}
+th.sortable::after{content:"";margin-left:5px;opacity:.45}
+th.sortable[aria-sort=ascending]::after{content:"\25B2"}
+th.sortable[aria-sort=descending]::after{content:"\25BC"}
+
+/* permission matrix */
+th.v{text-align:center;font-size:11px}
+td.v{text-align:center}
+table.matrix th.v{width:44px}
+table.matrix td.v{padding:3px 2px}
+.cell{display:inline-block;min-width:26px;padding:1px 4px;border-radius:var(--radius-sm);font-size:11px;
+  font-weight:700;border:1px solid transparent}
+.cell.d0{color:var(--d0-ink);font-weight:400}
+/* the same class as a button is interactive text, so it needs full contrast */
+button.cell.d0{color:var(--ink2);font-weight:600;border:1px solid var(--line)}
+.cell.d1{background:var(--d1-bg);color:var(--d1-ink)}
+.cell.d2{background:var(--d2-bg);color:var(--d2-ink)}
+.cell.d3{background:var(--d3-bg);color:var(--d3-ink)}
+.cell.d4{background:var(--d4-bg);color:var(--d4-ink)}
+.cell.df{background:var(--df-bg);color:var(--df-ink)}
+button.cell{cursor:pointer;font-family:inherit}
+.csnote{color:var(--ink2);font-size:11.5px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--ink2);margin:8px 0}
+.legend .cell{margin-right:4px}
+
+/* role pills */
+.pills{display:flex;gap:4px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--radius-pill);font-size:11.5px;
+  background:var(--brand-soft);color:var(--brand);border:1px solid var(--info-line);white-space:nowrap}
+body[data-host="xtb"] .pill{background:var(--card2);color:var(--ink);border:1px solid var(--line)}
+.pill.team{background:var(--card2);color:var(--ink2);border-color:var(--line)}
+.pill-src{font-size:9px;font-weight:700;letter-spacing:.4px;padding:0 4px;border-radius:var(--radius-sm);
+  background:var(--brand);color:var(--brand-ink);flex:none}
+.pill.team .pill-src,.pill-src.team{background:var(--ink2);color:var(--card)}
+.pill-via{font-size:10.5px;opacity:.85}
+
+/* modal */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;
+  z-index:60;padding:16px}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column}
+body[data-host="xtb"] .modal{border:var(--bevel);border-radius:0}
+.modal h3{margin:0;padding:10px 14px;font-size:14px;border-bottom:1px solid var(--line)}
+body[data-host="xtb"] .modal h3{background:var(--titlebar-bg);color:#fff;padding:3px 6px;font-size:12px;border:none}
+.modal .body{padding:14px;overflow:auto}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line)}
+
+/* log */
+.log{white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--field-bg);color:var(--ink);
+  border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px;font-family:var(--font-mono);font-size:11.5px}
+body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-size:12.5px;align-items:baseline}
+.kv dt{color:var(--ink2)}
+.kv dd{margin:0}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <svg class="hicon" viewBox="0 0 32 32" aria-hidden="true"><defs>
+      <linearGradient id="sh" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#FF4A63"/><stop offset=".55" stop-color="#EE163B"/><stop offset="1" stop-color="#B00E2A"/></linearGradient></defs>
+      <path fill="url(#sh)" d="M16 1.8 27.1 5.5c.54.18.9.68.9 1.24v8.02c0 7.32-4.5 12.6-11.55 15.33a1.25 1.25 0 0 1-.9 0C8.5 27.36 4 22.08 4 14.76V6.74c0-.56.36-1.06.9-1.24Z"/>
+      <g fill="#fff"><rect x="8.4" y="10.1" width="6.6" height="2.5" rx="1.25"/><rect x="16.4" y="10.1" width="7.2" height="2.5" rx="1.25"/>
+      <rect x="8.4" y="14.6" width="6.6" height="2.5" rx="1.25"/><rect x="16.4" y="14.6" width="2.5" height="2.5" rx="1.25" opacity=".45"/>
+      <rect x="20.3" y="14.6" width="3.3" height="2.5" rx="1.25"/><rect x="8.4" y="19.1" width="6.6" height="2.5" rx="1.25"/>
+      <rect x="16.4" y="19.1" width="4.4" height="2.5" rx="1.25" opacity=".45"/></g>
+      <path fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m11.6 23.9 2.5 2.6 5.4-5.7"/></svg>
+    <h1>User Security Role Table Access</h1>
+    <span class="byline">by Mark Christie &middot; v<span id="ver"></span> &middot; <span class="needsadmin">needs System Administrator</span></span>
+    <span class="grow"></span>
+    <!-- The host shows the connection in its own status bar, so this is hidden in XrmToolBox. -->
+    <span class="connline" id="connBar">
+      <span id="connMode"></span>
+      <span id="connOrg" class="mono"></span>
+      <span id="connUser"></span>
+    </span>
+    <button id="btnReload" type="button" class="subtle">Reload</button>
+  </header>
+
+  <!-- manual connection (standalone only) -->
+  <section class="card hidden" id="manualCard">
+    <h2>Connect</h2>
+    <p class="desc">This page is not running inside Dynamics 365, Power Platform ToolBox or XrmToolBox, so it needs an
+      organisation URL and a bearer token to reach the Dataverse Web API.</p>
+    <div class="row">
+      <div class="field wide"><label for="inUrl">Organisation URL</label>
+        <input type="text" id="inUrl" placeholder="https://yourorg.crm11.dynamics.com" autocomplete="off"></div>
+      <div class="field wide"><label for="inToken">Access token</label>
+        <input type="text" id="inToken" placeholder="eyJ0eXAiOi..." autocomplete="off"></div>
+      <div class="field" style="min-width:auto"><button class="primary" id="btnConnect" type="button">Connect</button></div>
+    </div>
+  </section>
+
+  <div id="boot" class="loader"><span class="spinner" aria-hidden="true"></span>
+    <span><strong id="bootMain">Starting&hellip;</strong> <span class="muted" id="bootSub"></span></span></div>
+
+  <div class="bar warn" id="adminNote">
+    <b>You need the System Administrator role to use this.</b>
+    It reads the tables behind Dataverse security &mdash; users, roles, teams, privileges and column
+    permissions &mdash; and in practice only an administrator can see all of them. Changing roles, profiles,
+    teams or business units needs write access on top. Signed in as anything less, the parts it cannot read
+    will say so rather than quietly showing you a wrong answer.
+  </div>
+
+  <div id="globalMsg" role="alert" aria-live="polite"></div>
+
+  <p id="sortHint" class="sr-only">Column header. Press Enter or Space to sort by this column.</p>
+  <main id="app" class="hidden">
+    <div role="tablist" aria-label="User Security Role Table Access sections">
+      <button role="tab" id="tabUsers" aria-controls="panUsers" aria-selected="true" type="button">Users <span class="cnt" id="tcUsers"></span></button>
+      <button role="tab" id="tabPerms" aria-controls="panPerms" aria-selected="false" tabindex="-1" type="button">Table access</button>
+      <button role="tab" id="tabCols" aria-controls="panCols" aria-selected="false" tabindex="-1" type="button">Column security <span class="cnt" id="tcCols"></span></button>
+      <button role="tab" id="tabCopy" aria-controls="panCopy" aria-selected="false" tabindex="-1" type="button">Copy &amp; assign <span class="cnt" id="tcCopy"></span></button>
+    </div>
+
+    <!-- ============================ USERS ============================ -->
+    <section role="tabpanel" id="panUsers" aria-labelledby="tabUsers" tabindex="0">
+      <div class="card">
+        <h2>Filter users</h2>
+        <div class="row">
+          <div class="field wide"><label for="fSearch">Search</label>
+            <input type="search" id="fSearch" placeholder="Name, email or username" autocomplete="off"></div>
+          <div class="field"><label for="fType">User type</label>
+            <select id="fType">
+              <option value="people" selected>People (interactive)</option>
+              <option value="all">Everything</option>
+              <option value="app">Application users</option>
+              <option value="noninteractive">Non-interactive</option>
+              <option value="system">System / support</option>
+            </select></div>
+          <div class="field"><label for="fBu">Business unit</label><select id="fBu"><option value="">All</option></select></div>
+          <div class="field"><label for="fRole">Has role</label><select id="fRole"><option value="">Any</option></select></div>
+          <div class="field"><label for="fTeam">In team</label><select id="fTeam"><option value="">Any</option></select></div>
+          <div class="field" style="min-width:auto">
+            <label class="inline"><input type="checkbox" id="fDisabled"> Include disabled</label>
+            <label class="inline"><input type="checkbox" id="fNoRoles"> Only users with no roles</label>
+          </div>
+        </div>
+        <div class="spaced">
+          <button id="btnSelAll" type="button">Select all shown</button>
+          <button id="btnSelNone" type="button">Clear selection</button>
+          <button id="btnExportUsers" type="button">Export CSV</button>
+          <span class="grow"></span>
+          <span class="hint" id="usersSummary"></span>
+        </div>
+        <div id="usersBanner"></div>
+      </div>
+      <div class="scroll"><table id="tblUsers">
+        <thead><tr>
+          <th style="width:30px"><span class="sr-only">Select</span></th>
+          <th class="sortable" data-sort="name" aria-sort="ascending">User</th>
+          <th class="sortable" data-sort="bu">Business unit</th>
+          <th class="sortable" data-sort="type">Type</th>
+          <th class="sortable num" data-sort="direct" title="Roles assigned to the user directly">Direct</th>
+          <th class="sortable num" data-sort="inherited" title="Roles the user inherits from a team">Inherited</th>
+          <th>Security roles</th>
+          <th class="sortable num" data-sort="teams">Teams</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table></div>
+    </section>
+
+    <!-- ============================ PERMISSIONS ============================ -->
+    <section role="tabpanel" id="panPerms" aria-labelledby="tabPerms" tabindex="0" class="hidden">
+      <div class="card">
+        <h2>Effective table access</h2>
+        <p class="desc">Computed by stacking every privilege from the user's directly assigned roles and the roles of the
+          teams they belong to, taking the <strong>highest access level</strong> for each verb &mdash; which is how
+          Dataverse itself resolves them. Access teams grant no roles and are excluded from the maths.</p>
+        <div class="row">
+          <div class="field wide"><label for="pUser">User</label><select id="pUser"></select></div>
+          <div class="field wide"><label for="pSearch">Find table</label>
+            <input type="search" id="pSearch" placeholder="Table display or logical name" autocomplete="off"></div>
+          <div class="field"><label for="pShow">Show</label>
+            <select id="pShow">
+              <option value="any" selected>Tables with any access</option>
+              <option value="all">All tables</option>
+              <option value="none">Tables with no access</option>
+              <option value="write">Tables the user can change</option>
+            </select></div>
+          <div class="field" style="min-width:auto"><button id="btnExportPerms" type="button">Export CSV</button></div>
+        </div>
+        <div id="permHead"></div>
+        <div class="legend" aria-hidden="false">
+          <span><strong>Access level:</strong></span>
+          <span><span class="cell d1">U</span>User (own records)</span>
+          <span><span class="cell d2">B</span>Business unit</span>
+          <span><span class="cell d3">P</span>Parent: child business units</span>
+          <span><span class="cell d4">O</span>Organization</span>
+          <span><span class="cell df">F</span>Record filter</span>
+          <span><span class="cell d0">&mdash;</span>None</span>
+          <span><strong>CS</strong> = secured columns on the table this user can reach</span>
+        </div>
+      </div>
+      <div class="scroll"><table class="matrix" id="tblPerms">
+        <thead><tr>
+          <th class="sortable" data-psort="name" aria-sort="ascending">Table</th>
+          <th class="v" title="Create">C<span class="sr-only"> Create</span></th>
+          <th class="v" title="Read">R<span class="sr-only"> Read</span></th>
+          <th class="v" title="Write (update)">U<span class="sr-only"> Write (update)</span></th>
+          <th class="v" title="Delete">D<span class="sr-only"> Delete</span></th>
+          <th class="v" title="Append (attach this record to another)">Ap<span class="sr-only">pend</span></th>
+          <th class="v" title="Append To (let others attach to this record)">At<span class="sr-only"> Append To</span></th>
+          <th class="v" title="Assign (change owner)">As<span class="sr-only">sign</span></th>
+          <th class="v" title="Share">Sh<span class="sr-only">are</span></th>
+          <th class="v" title="Column security: secured columns on this table the user can reach">CS<span class="sr-only"> Column security</span></th>
+          <th class="sortable" data-psort="logical">Logical name</th>
+        </tr></thead>
+        <tbody id="permsBody"></tbody>
+      </table></div>
+      <p class="hint" id="permsFoot"></p>
+    </section>
+
+    <!-- ============================ COLUMN SECURITY ============================ -->
+    <section role="tabpanel" id="panCols" aria-labelledby="tabCols" tabindex="0" class="hidden">
+      <div class="card">
+        <h2>Secured columns this user can reach</h2>
+        <p class="desc">A column marked as secured is hidden from <em>everyone</em> until a Column Security
+          Profile grants it back &mdash; table-level Read is not enough. This lists every secured column in the
+          environment and what this user's profiles, held directly or through a team, allow on each one.</p>
+        <div class="row">
+          <div class="field wide"><label for="kUser">User</label><select id="kUser"></select></div>
+          <div class="field wide"><label for="kSearch">Find column</label>
+            <input type="search" id="kSearch" placeholder="Table or column name" autocomplete="off"></div>
+          <div class="field"><label for="kShow">Show</label>
+            <select id="kShow">
+              <option value="any" selected>Columns the user can reach</option>
+              <option value="all">All secured columns</option>
+              <option value="none">Columns the user cannot reach</option>
+            </select></div>
+          <div class="field" style="min-width:auto"><button id="btnExportCols" type="button">Export CSV</button></div>
+        </div>
+        <div id="colHead"></div>
+      </div>
+      <div class="scroll"><table id="tblCols">
+        <thead><tr>
+          <th class="sortable" data-ksort="table" aria-sort="ascending">Table</th>
+          <th class="sortable" data-ksort="column">Column</th>
+          <th class="v">Read</th><th class="v">Create</th><th class="v">Update</th>
+          <th class="v">Unmasked</th>
+          <th>Granted by</th>
+        </tr></thead>
+        <tbody id="colsBody"></tbody>
+      </table></div>
+      <p class="hint" id="colsFoot"></p>
+    </section>
+
+    <!-- ============================ COPY & ASSIGN ============================ -->
+    <section role="tabpanel" id="panCopy" aria-labelledby="tabCopy" tabindex="0" class="hidden">
+      <div class="bar warn">
+        <b>The write features have not yet been run against a live environment.</b>
+        Copying roles, profiles, teams and especially <strong>business units</strong> changes real access and
+        cannot be undone. Read the preview line by line, start with one user, and check the result before
+        doing it in bulk. Moving a business unit removes every security role the user has — this tool
+        re-applies the equivalents in the new unit immediately afterwards, but that is exactly the sort of
+        thing to verify on a test account first.
+      </div>
+      <div class="card">
+        <h2>1. What to do</h2>
+        <div class="row">
+          <div class="field wide"><label for="cOp">Operation</label>
+            <select id="cOp">
+              <option value="copy" selected>Copy from another user</option>
+              <option value="assign">Assign specific things</option>
+            </select></div>
+          <div class="field wide" id="cSourceWrap"><label for="cSource">Copy from</label><select id="cSource"></select></div>
+          <div class="field" style="min-width:auto" id="cModeWrap"><label for="cMode">Mode</label>
+            <select id="cMode">
+              <option value="add" selected>Add &mdash; leave the targets' other assignments alone</option>
+              <option value="mirror">Mirror &mdash; make the targets match the source exactly</option>
+            </select></div>
+        </div>
+        <div class="spaced" id="cWhat">
+          <strong style="font-size:12.5px">Include:</strong>
+          <label class="inline"><input type="checkbox" id="wRoles" checked> Security roles</label>
+          <label class="inline"><input type="checkbox" id="wProfiles"> Column security profiles</label>
+          <label class="inline"><input type="checkbox" id="wTeams"> Team membership</label>
+          <label class="inline"><input type="checkbox" id="wBu"> Business unit</label>
+        </div>
+        <div id="cRoles"></div>
+      </div>
+
+      <div class="card hidden" id="cAssignCard">
+        <h2>What to assign</h2>
+        <p class="desc">Pick exactly what to apply to the selected users. Anything left blank is not touched.</p>
+        <div class="row">
+          <div class="field wide"><label for="aRole">Security role</label><select id="aRole"><option value="">&mdash; none &mdash;</option></select></div>
+          <div class="field wide"><label for="aProfile">Column security profile</label><select id="aProfile"><option value="">&mdash; none &mdash;</option></select></div>
+        </div>
+        <div class="row">
+          <div class="field wide"><label for="aTeam">Team</label><select id="aTeam"><option value="">&mdash; none &mdash;</option></select></div>
+          <div class="field wide"><label for="aBu">Move to business unit</label><select id="aBu"><option value="">&mdash; leave unchanged &mdash;</option></select></div>
+          <div class="field" style="min-width:auto"><label for="aAction">Action</label>
+            <select id="aAction">
+              <option value="add" selected>Add</option>
+              <option value="remove">Remove</option>
+            </select></div>
+        </div>
+        <p class="hint">Removing does not apply to a business unit &mdash; a user always belongs to exactly one, so it can only be changed.</p>
+      </div>
+
+      <div class="card">
+        <h2>2. Targets</h2>
+        <p class="desc">Tick users on the <strong>Users</strong> tab, then come back here. <strong>Security roles</strong>
+          are matched into each target's own business unit &mdash; Dataverse refuses a role that belongs to a different
+          one. <strong>Column security profiles</strong> are organisation-wide, so they need no such matching.</p>
+        <div id="cTargets"><p class="hint">No users selected yet.</p></div>
+      </div>
+
+      <div class="card">
+        <h2>3. Preview and apply</h2>
+        <div class="spaced">
+          <button class="primary" id="btnPreview" type="button">Preview changes</button>
+          <button class="danger" id="btnApply" type="button" disabled>Apply&hellip;</button>
+          <span class="grow"></span>
+          <span class="hint" id="copySummary"></span>
+        </div>
+        <div id="copyPlan"></div>
+        <div id="copyProg" class="hidden"><div class="prog"><i id="copyBar"></i></div></div>
+        <div id="copyLogWrap" class="hidden">
+          <div style="font-weight:600;font-size:12.5px" id="copyLogLabel">Log</div>
+          <pre class="log" id="copyLog" tabindex="0" role="log" aria-labelledby="copyLogLabel"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ================================ constants ================================ */
+var APP_VERSION = "1.0.0";
+var API_VER     = "v9.2";
+var SYSADMIN_TEMPLATE = "627090ff-40a3-4053-8790-584edc5be201"; // constant in every environment
+
+// The eight table verbs, in the order the matrix shows them.
+var VERBS = [
+  {key:"Create",   col:"C",  label:"Create"},
+  {key:"Read",     col:"R",  label:"Read"},
+  {key:"Write",    col:"U",  label:"Write (update)"},
+  {key:"Delete",   col:"D",  label:"Delete"},
+  {key:"Append",   col:"Ap", label:"Append"},
+  {key:"AppendTo", col:"At", label:"Append To"},
+  {key:"Assign",   col:"As", label:"Assign"},
+  {key:"Share",    col:"Sh", label:"Share"}
+];
+
+// PrivilegeDepth as returned by RetrieveRolePrivilegesRole — an enum NAME, not an integer.
+// RecordFilter is deliberately ranked 0: it is an orthogonal mechanism, not "better than Global".
+var DEPTH = {
+  Basic:        {rank:1, cls:"d1", short:"U", label:"User"},
+  Local:        {rank:2, cls:"d2", short:"B", label:"Business unit"},
+  Deep:         {rank:3, cls:"d3", short:"P", label:"Parent: child business units"},
+  Global:       {rank:4, cls:"d4", short:"O", label:"Organization"},
+  RecordFilter: {rank:0, cls:"df", short:"F", label:"Record filter"}
+};
+// privilegedepthmask (the roleprivileges column) is a bitmask and a DIFFERENT encoding from the
+// enum above. Verified live: 1/2/4/8 dominate and 16 exists in the wild. Only used as a fallback.
+var MASK_DEPTH = {1:"Basic", 2:"Local", 4:"Deep", 8:"Global", 16:"RecordFilter"};
+// PrivilegeDepth, the enum the function messages use. Note mask 4 = Deep but enum 4 = RecordFilter.
+var DEPTH_ENUM = ["Basic","Local","Deep","Global","RecordFilter"];
+
+// Column security. canread / cancreate / canupdate use the field_security_permission_type choice:
+// 0 = Not Allowed, 4 = Allowed. The value is 4, NOT 1 — but read defensively as "non-zero means allowed".
+// canreadunmasked is a DIFFERENT choice (field_security_permission_readunmasked): 0 None, 1 One Record,
+// 3 All Records. Rendering it as a yes/no toggle would misreport it.
+function fsAllowed(v){
+  if(v == null || v === "") return false;
+  if(typeof v === "boolean") return v;
+  var n = Number(v);
+  if(!isNaN(n)) return n !== 0;                     // 0 = Not Allowed, 4 = Allowed
+  return norm(v) === "allowed";                     // a label; anything unrecognised is NOT a grant
+}
+var UNMASKED = {0:"No", 1:"One record", 3:"All records"};
+// Learn: this profile "always contains references to each secured column".
+var SYSADMIN_FS_PROFILE = "572329c1-a042-4e22-be47-367c6374ea45";
+
+// role.isautoassigned is a Picklist (0/1), NOT a Boolean — comparing it with === true never matches,
+// which would silently switch off the licence-driven-role protection everywhere it is used.
+function isAutoAssigned(r){ return !!r && (r.isautoassigned === true || Number(r.isautoassigned) === 1); }
+
+var ACCESS_MODE = {0:"Read-Write",1:"Administrative",2:"Read",3:"Support User",4:"Non-interactive",5:"Delegated Admin"};
+var TEAM_TYPE   = {0:"Owner",1:"Access",2:"Entra security group",3:"Entra Office group"};
+
+// Documented error codes for role assignment, mapped to something a human can act on.
+var ERRORS = {
+  "0x80041409":"The role belongs to a different business unit from the user. Dataverse only allows this when “Record ownership across business units” is switched on.",
+  "0x80048d35":"The user is disabled. Enable them first, or switch on the AllowRoleAssignmentOnDisabledUsers organisation setting.",
+  "0x80090918":"This is an application user and the role carries elevated privileges, which Dataverse will not grant to app users.",
+  "0x80090911":"The Service Reader / Writer / Deleter roles can only be given to an application user.",
+  "0x80041d51":"Roles cannot be assigned to the support user.",
+  "0x80041d44":"The Support User role cannot be assigned to a user.",
+  "0x80048331":"Roles cannot be assigned to an access team.",
+  "0x80048350":"Microsoft Entra group teams can only be given roles marked as inheritable.",
+  "0x80041d64":"Tenant administrators cannot be removed from the System Administrator role.",
+  "0x80048d3b":"You do not hold every privilege contained in this role, so Dataverse will not let you assign it. The message below lists the privileges you are missing.",
+  "0x80040237":"The user already has this role.",
+  "0x80040208":"Members of a Microsoft Entra security-group or Office-group team are derived from the group itself — they have to be changed in Entra, not here.",
+  "0x8004830b":"Members cannot be added to a business unit's default team. Change the user's business unit instead — the platform moves them between default teams for you.",
+  "0x8004830c":"Members cannot be removed from a business unit's default team. Change the user's business unit instead.",
+  "0x80048307":"The default team of a business unit cannot be deleted.",
+  "0x80072560":"The user is not a member of that team.",
+  "0x80048d38":"Dataverse will not let you attach a user to a column security profile unless you hold every column permission that profile grants. Ask an administrator, or have those permissions granted to you first.",
+  "0x80048d39":"Dataverse will not let you attach a team to a column security profile unless you hold every column permission that profile grants.",
+  "0x8004140d":"The role belongs to a different business unit from the team.",
+  "0x80040220":"You are missing a privilege this change needs. The message below names it.",
+  "0x80040231":"The target user or team does not hold the privileges this change requires."
+};
+
+/* ================================ state ================================ */
+var S = {
+  conn:null, api:null,
+  me:null, meId:null,      // WhoAmI + the signed-in user's id (self-target guard)
+  users:[], usersById:{},
+  bus:[], busById:{},
+  roles:[], rolesById:{},
+  teams:[], teamsById:{},
+  profiles:[], profilesById:{}, profileListError:null,
+  teamRoles:{},            // teamid -> [roleid]
+  rolePrivs:{},            // roleid -> {byPrivId:{privilegeId:depthName}, count, error}
+  meta:null,               // {tables:[], privIndex:{privilegeId:{table,verb}}}
+  secured:null,            // [{table, label, column, columnLabel}] - every secured column in the org
+  securedLoading:null,
+  profilePerms:{},         // fieldsecurityprofileid -> {byKey:{'table.column':perm}, error}
+  colUser:null, colRows:null, colInfo:null, colCache:{}, colTableFilter:null,
+  ksort:{key:"table", dir:1},
+  selected:{},             // systemuserid -> true
+  sort:{key:"name", dir:1},
+  psort:{key:"name", dir:1},
+  permUser:null, permRows:null,
+  plan:null,
+  metaLoading:null
+};
+
+/* ================================ tiny DOM helpers ================================ */
+function $(id){ return document.getElementById(id); }
+function show(el,on){ if(el) el.classList.toggle("hidden", !on); }
+function el(tag,attrs,kids){
+  var e=document.createElement(tag);
+  if(attrs) for(var k in attrs){
+    if(k==="class") e.className=attrs[k];
+    else if(k==="text") e.textContent=attrs[k];
+    else if(k==="html") e.innerHTML=attrs[k];
+    else if(k.slice(0,2)==="on") e.addEventListener(k.slice(2),attrs[k]);
+    else if(attrs[k]!=null && attrs[k]!==false) e.setAttribute(k,attrs[k]);
+  }
+  if(kids) kids.forEach(function(c){ if(c!=null) e.appendChild(typeof c==="string"?document.createTextNode(c):c); });
+  return e;
+}
+function clear(e){ while(e.firstChild) e.removeChild(e.firstChild); }
+function norm(v){ return (v==null?"":String(v)).trim().toLowerCase(); }
+function esc(s){ return (s==null?"":String(s)); }
+function lower(g){ return (g||"").toLowerCase(); }
+var EMDASH = "\u2014";
+
+function boot(main,sub){ var b=$("boot"); if(!b) return; show(b,true); $("bootMain").textContent=main||""; $("bootSub").textContent=sub||""; }
+function bootDone(){ show($("boot"),false); }
+function banner(host,kind,title,detail){
+  var h = typeof host==="string" ? $(host) : host;
+  if(!h) return;
+  clear(h);
+  h.appendChild(el("div",{class:"bar "+(kind||"")},[ el("b",{text:title}), detail?document.createTextNode(detail):null ]));
+}
+function clearBanner(host){ var h = typeof host==="string" ? $(host) : host; if(h) clear(h); }
+
+/* ================================ host detection ================================ */
+var PPTB = (typeof window!=="undefined") && !!window.dataverseAPI;
+
+function detectXrm(){
+  try{ if(window.Xrm && window.Xrm.Utility) return window.Xrm; }catch(e){}
+  try{ if(window.parent && window.parent.Xrm && window.parent.Xrm.Utility) return window.parent.Xrm; }catch(e){}
+  return null;
+}
+function pickOrgUrl(c){
+  if(!c) return "";
+  var cands=[c.url,c.environmentUrl,c.instanceUrl,c.apiUrl,c.resourceUrl,c.environment];
+  for(var i=0;i<cands.length;i++){
+    if(typeof cands[i]==="string" && /^https:\/\/.+\.dynamics\.com/i.test(cands[i])) return cands[i].replace(/\/+$/,"");
+  }
+  return "";
+}
+function makeConn(){
+  if(PPTB) return {host:"pptb", mode:"Power Platform ToolBox", baseUrl:"", token:null, ready:true};
+  if(window.XTB_CONFIG && window.XTB_CONFIG.baseUrl){
+    // The plugin loads this page from a local origin, so a bearer token is the ONLY way it can reach
+    // Dataverse. Without one, say so instead of failing every request with a confusing CORS error.
+    var tok = window.XTB_CONFIG.token || null;
+    return {host:"xtb", mode:tok ? "XrmToolBox" : "XrmToolBox (no token on this connection)",
+            baseUrl:String(window.XTB_CONFIG.baseUrl).replace(/\/+$/,""),
+            token:tok, user:window.XTB_CONFIG.userName||null, ready:!!tok,
+            hint:tok ? null : "XrmToolBox did not supply an OAuth access token for this connection. Reconnect the organisation using an OAuth/MFA connection, or paste a token below."};
+  }
+  var xrm=detectXrm();
+  if(xrm){
+    try{
+      return {host:"web", mode:"Dynamics 365 (same origin)",
+              baseUrl:xrm.Utility.getGlobalContext().getClientUrl().replace(/\/+$/,""), token:null, ready:true};
+    }catch(e){ /* getGlobalContext can throw in an unusual host - fall through to origin detection */ }
+  }
+  if(location.protocol.indexOf("http")===0 && /\.dynamics\.com$/i.test(location.hostname))
+    return {host:"web", mode:"Web resource (signed-in user)", baseUrl:location.origin, token:null, ready:true};
+  return {host:"web", mode:"Not connected", baseUrl:"", token:null, ready:false};
+}
+
+/* ================================ API layer ================================ */
+/* Ask the XrmToolBox plugin host for a fresh access token. It answers over the WebView2 message
+   channel; if nothing replies within a couple of seconds we give up and let the 401 surface. */
+function requestXtbToken(){
+  return new Promise(function(resolve){
+    var wv = window.chrome && window.chrome.webview;
+    if(!wv || !wv.postMessage) return resolve(null);
+    var done = false;
+    function onMsg(ev){
+      var d = ev && ev.data;
+      if(typeof d === "string"){ try{ d = JSON.parse(d); }catch(e){ return; } }
+      if(!d || d.type !== "token" || !d.token) return;
+      done = true;
+      try{ wv.removeEventListener("message", onMsg); }catch(e){}
+      if(window.XTB_CONFIG) window.XTB_CONFIG.token = d.token;
+      resolve(d.token);
+    }
+    try{
+      wv.addEventListener("message", onMsg);
+      wv.postMessage(JSON.stringify({type:"refreshToken"}));
+    }catch(e){ return resolve(null); }
+    setTimeout(function(){
+      if(done) return;
+      try{ wv.removeEventListener("message", onMsg); }catch(e){}
+      resolve(null);
+    }, 2500);
+  });
+}
+
+function makeApi(conn){
+  var root  = conn.baseUrl + "/api/data/" + API_VER + "/";
+  var creds = conn.token ? "omit" : "include";
+
+  function headers(extra){
+    var h = {"OData-MaxVersion":"4.0","OData-Version":"4.0","Accept":"application/json",
+             "Content-Type":"application/json; charset=utf-8",
+             // collection-valued results can otherwise be served stale from the browser cache
+             "If-None-Match":"null"};
+    if(conn.token) h.Authorization = "Bearer " + conn.token;
+    if(extra) for(var k in extra) h[k]=extra[k];
+    return h;
+  }
+  function describe(err, method, path){
+    var msg = method + " " + String(path).split("?")[0];
+    return msg + " → " + err;
+  }
+  function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  async function freq(method, path, body, extraHeaders, attempt){
+    attempt = attempt || 0;
+    var url = path.indexOf("http")===0 ? path : root + path;
+    var opts = {method:method, headers:headers(extraHeaders), credentials:creds};
+    if(body!==undefined) opts.body = JSON.stringify(body);
+    var res = await fetch(url, opts);
+
+    // XrmToolBox hands us a bearer token that expires after about an hour, and a bulk role copy across
+    // a large tenant can easily outlive it. Ask the plugin for a fresh one and retry once.
+    if(res.status===401 && conn.host==="xtb" && attempt < 1){
+      var fresh = await requestXtbToken();
+      if(fresh){ conn.token = fresh; return await freq(method, path, body, extraHeaders, attempt+1); }
+    }
+
+    // Service protection limits. A browser looping over hundreds of users is exactly the shape that
+    // trips them, and a 429 is a "come back shortly", not a failure worth showing the operator.
+    if((res.status===429 || res.status===503) && attempt < 4){
+      var ra = 0;
+      try{ ra = parseInt(res.headers.get("Retry-After"), 10) || 0; }catch(e){}   // not CORS-safelisted cross-origin
+      await wait(Math.min((ra ? ra*1000 : Math.pow(2, attempt) * 1500), 30000));
+      return await freq(method, path, body, extraHeaders, attempt+1);
+    }
+    if(!res.ok){
+      var code=null, detail="";
+      try{
+        var j = await res.json();
+        if(j && j.error){ detail = j.error.message||""; code = j.error.code||null; }
+      }catch(e){ try{ detail = await res.text(); }catch(e2){} }
+      var err = new Error(describe(res.status+" "+res.statusText+(detail?": "+detail:""), method, path));
+      err.status = res.status; err.code = code; err.detail = detail;
+      throw err;
+    }
+    if(res.status===204) return null;
+    var t = await res.text();
+    return t ? JSON.parse(t) : null;
+  }
+  // strip any absolute prefix so the ToolBox helper receives a relative OData path
+  function rel(p){ return String(p).replace(/^.*\/api\/data\/v9\.\d+\//,"").replace(/^\//,""); }
+
+  // PPTB's queryData only models plain "entityset?query" shapes. Anything else (a key predicate with a
+  // navigation property, a metadata path, a function) gets a raw fetch instead — and PPTB tools do have
+  // the org URL, resolved from the active connection at startup.
+  function odd(path){
+    return /^EntityDefinitions|^RetrieveRolePrivilegesRole|^WhoAmI|Microsoft\.Dynamics\.CRM\.|\)\//.test(path);
+  }
+  async function get(path, extraHeaders){
+    // ToolBox tools are sandboxed and hold no token, so a raw fetch could never be authenticated —
+    // falling back to one would replace a real Dataverse error with a misleading network failure and
+    // hide the 400 that getAllTolerant depends on. Let the host's error through unchanged.
+    if(PPTB && !odd(path)) return await window.dataverseAPI.queryData(rel(path));
+    return await freq("GET", path, undefined, extraHeaders);
+  }
+  // Page through a collection. Dataverse has no $skip: follow @odata.nextLink verbatim and resend
+  // the identical Prefer header on every page or the paging cookie is invalidated.
+  async function getAll(path, onPage, pageSize){
+    var prefer = pageSize ? {"Prefer":"odata.maxpagesize="+pageSize} : undefined;
+    var url = path, out = [], guard = 0;
+    while(url && guard++ < 400){
+      var p = await get(url, prefer);
+      out = out.concat((p && p.value) || []);
+      if(onPage) onPage(out.length);
+      url = (p && p["@odata.nextLink"]) || null;
+    }
+    return out;
+  }
+  // Some columns exist only on newer platform versions and one bad column 400s the whole request.
+  // Try the full $select, then progressively drop the optional ones.
+  async function getAllTolerant(pathFn, required, optional, pageSize){
+    var opt = optional.slice();
+    for(;;){
+      try{ return await getAll(pathFn(required.concat(opt)), null, pageSize); }
+      catch(e){
+        // Only an unrecognised-column error may trigger degradation. A transient failure must not
+        // start amputating the $select. PPTB rejections carry no HTTP status, so match the text too.
+        var msg = String((e && (e.detail || e.message)) || "");
+        var badColumn = e.status === 400 ||
+          /Could not find a property named|doesn't contain attribute with Name|undeclared property|Invalid property/i.test(msg);
+        if(!opt.length || !badColumn) throw e;
+        opt.pop();
+      }
+    }
+  }
+  return {
+    root:root, get:get, getAll:getAll, getAllTolerant:getAllTolerant,
+
+    /* ---- the four calls that cannot be expressed as a plain OData query ---- */
+
+    whoAmI:async function(){
+      // No fetch fallback in ToolBox: it holds no token, so the fallback could only ever fail - and it
+      // would hide the host's real error behind a network one.
+      if(PPTB) return await window.dataverseAPI.execute({operationName:"WhoAmI", operationType:"function", parameters:{}});
+      return await get("WhoAmI");
+    },
+
+    // Every table with its privilege list. Privileges is a PROPERTY of EntityMetadata, so over the raw
+    // Web API it must be $select-ed and never $expand-ed; metadata queries are never paged.
+    tablePrivileges:async function(lcid){
+      var props = ["LogicalName","SchemaName","DisplayName","ObjectTypeCode","Privileges"];
+      if(PPTB) return await window.dataverseAPI.getAllEntitiesMetadata(props);
+      try{
+        return await get("EntityDefinitions?$select="+props.join(",")+"&$filter=IsPrivate eq false&LabelLanguages="+(lcid||1033));
+      }catch(e){
+        return await get("EntityDefinitions?$select=LogicalName,SchemaName,DisplayName,Privileges");
+      }
+    },
+
+    // UNBOUND function: bare name, no Microsoft.Dynamics.CRM. prefix, unquoted GUID.
+    rolePrivileges:async function(roleId){
+      if(PPTB) return await window.dataverseAPI.execute({operationName:"RetrieveRolePrivilegesRole",
+                        operationType:"function", parameters:{RoleId:roleId}});
+      return await get("RetrieveRolePrivilegesRole(RoleId="+roleId+")");
+    },
+
+    // Roles assigned DIRECTLY to a user. PPTB has no way to walk a navigation property, so use
+    // FetchXML across the systemuserroles intersect, which its host API does support.
+    userRoles:async function(userId){
+      if(PPTB){
+        var fx = "<fetch><entity name='role'><attribute name='roleid'/><attribute name='name'/>"+
+                 "<link-entity name='systemuserroles' from='roleid' to='roleid' intersect='true'>"+
+                 "<filter><condition attribute='systemuserid' operator='eq' value='"+userId+"'/></filter>"+
+                 "</link-entity></entity></fetch>";
+        var r = await window.dataverseAPI.fetchXmlQuery(fx);
+        return (r && r.value) || [];
+      }
+      return await getAll("systemusers("+userId+")/systemuserroles_association?$select=roleid,name");
+    },
+    userTeams:async function(userId){
+      if(PPTB){
+        var fx = "<fetch><entity name='team'><attribute name='teamid'/><attribute name='name'/>"+
+                 "<attribute name='teamtype'/>"+
+                 "<link-entity name='teammembership' from='teamid' to='teamid' intersect='true'>"+
+                 "<filter><condition attribute='systemuserid' operator='eq' value='"+userId+"'/></filter>"+
+                 "</link-entity></entity></fetch>";
+        var r = await window.dataverseAPI.fetchXmlQuery(fx);
+        return (r && r.value) || [];
+      }
+      return await getAll("systemusers("+userId+")/teammembership_association?$select=teamid,name,teamtype");
+    },
+    teamRoles:async function(teamId){
+      if(PPTB){
+        var fx = "<fetch><entity name='role'><attribute name='roleid'/><attribute name='name'/>"+
+                 "<link-entity name='teamroles' from='roleid' to='roleid' intersect='true'>"+
+                 "<filter><condition attribute='teamid' operator='eq' value='"+teamId+"'/></filter>"+
+                 "</link-entity></entity></fetch>";
+        var r = await window.dataverseAPI.fetchXmlQuery(fx);
+        return (r && r.value) || [];
+      }
+      return await getAll("teams("+teamId+")/teamroles_association?$select=roleid,name");
+    },
+
+    // Every secured column in the environment. This is METADATA, so anyone can read it — unlike the
+    // field permissions themselves, which need prvReadFieldPermission (in practice, an administrator).
+    // ToolBox route: derive the secured-column universe from the System Administrator profile, which
+    // the platform keeps pointed at every secured column. A plain entity-set query, so queryData copes.
+    securedColumnsViaProfile:async function(){
+      var rows = await getAll("fieldpermissions?$select=entityname,attributelogicalname" +
+                              "&$filter=_fieldsecurityprofileid_value eq " + SYSADMIN_FS_PROFILE +
+                              "&$orderby=fieldpermissionid asc", null, 5000);
+      var labels = {};
+      try{
+        var meta = await window.dataverseAPI.getAllEntitiesMetadata(["LogicalName","DisplayName"]);
+        ((meta && meta.value) || []).forEach(function(t){ labels[norm(t.LogicalName)] = metaLabel(t.DisplayName); });
+      }catch(e){}
+      return {value: rows.map(function(r){
+        return {LogicalName:r.entityname, _label:labels[norm(r.entityname)],
+                Attributes:[{LogicalName:r.attributelogicalname, IsSecured:true}]};
+      })};
+    },
+    securedColumns:async function(lcid){
+      // LabelLanguages keeps this to one language: without it every table and attribute carries a full
+      // set of localised labels, which turns a ~1 MB response into several in a multi-language org.
+      var path = "EntityDefinitions?$select=LogicalName,SchemaName,DisplayName" +
+                 "&$filter=IsPrivate eq false" +
+                 "&$expand=Attributes($select=LogicalName,DisplayName,IsSecured;$filter=IsSecured eq true)" +
+                 "&LabelLanguages=" + (lcid || 1033);
+      // Deliberately NOT routed through queryData: a metadata path with a nested $expand is exactly the
+      // shape odd() says ToolBox cannot model, and a mangled-but-successful response here would be read
+      // as "nothing is secured".
+      return await get(path);
+    },
+    // Column Security Profiles held directly by a principal. There is no reverse-named property:
+    // systemuserprofiles_association / teamprofiles_association are used from both ends.
+    userProfiles:async function(userId){
+      if(PPTB){
+        var fx = "<fetch><entity name='fieldsecurityprofile'><attribute name='fieldsecurityprofileid'/>" +
+                 "<attribute name='name'/>" +
+                 "<link-entity name='systemuserprofiles' from='fieldsecurityprofileid' to='fieldsecurityprofileid' intersect='true'>" +
+                 "<filter><condition attribute='systemuserid' operator='eq' value='"+userId+"'/></filter>" +
+                 "</link-entity></entity></fetch>";
+        var r = await window.dataverseAPI.fetchXmlQuery(fx);
+        return (r && r.value) || [];
+      }
+      return await getAll("systemusers("+userId+")/systemuserprofiles_association?$select=fieldsecurityprofileid,name");
+    },
+    teamProfiles:async function(teamId){
+      if(PPTB){
+        var fx = "<fetch><entity name='fieldsecurityprofile'><attribute name='fieldsecurityprofileid'/>" +
+                 "<attribute name='name'/>" +
+                 "<link-entity name='teamprofiles' from='fieldsecurityprofileid' to='fieldsecurityprofileid' intersect='true'>" +
+                 "<filter><condition attribute='teamid' operator='eq' value='"+teamId+"'/></filter>" +
+                 "</link-entity></entity></fetch>";
+        var r = await window.dataverseAPI.fetchXmlQuery(fx);
+        return (r && r.value) || [];
+      }
+      return await getAll("teams("+teamId+")/teamprofiles_association?$select=fieldsecurityprofileid,name");
+    },
+    // The permissions inside one profile.
+    //
+    // Deliberately a plain entity-set query rather than the documented
+    // fieldsecurityprofiles(id)/lk_fieldpermission_fieldsecurityprofileid navigation path, for two
+    // reasons: a flat query works through ToolBox's queryData (a navigation path does not), and it
+    // keeps every host on OData. That matters because `entityname` is an EntityName-typed column -
+    // over the Web API it is the logical name, but through FetchXML it comes back as the object type
+    // code or the table's DISPLAY name, neither of which joins to metadata.
+    profilePermissions:async function(profileId){
+      var req = ["entityname","attributelogicalname","canread","cancreate","canupdate"];
+      var opt = ["canreadunmasked"];     // absent on older platform versions
+      return await getAllTolerant(function(cols){
+        return "fieldpermissions?$select="+cols.join(",")+
+               "&$filter=_fieldsecurityprofileid_value eq "+profileId+
+               "&$orderby=fieldpermissionid asc";
+      }, req, opt, 5000);
+    },
+
+    // --- column security profiles -------------------------------------------------------------
+    // Learn documents the profile-as-base direction, so use that. Profiles are organisation-owned,
+    // so unlike security roles there is no per-business-unit copy to resolve.
+    assocProfile:function(profileId, userId){
+      if(PPTB) return window.dataverseAPI.associate("fieldsecurityprofile", profileId,
+                        "systemuserprofiles_association", "systemuser", userId);
+      return freq("POST","fieldsecurityprofiles("+profileId+")/systemuserprofiles_association/$ref",
+                  {"@odata.id": root+"systemusers("+userId+")"});
+    },
+    unassocProfile:function(profileId, userId){
+      if(PPTB) return window.dataverseAPI.disassociate("fieldsecurityprofile", profileId,
+                        "systemuserprofiles_association", userId);
+      return freq("DELETE","fieldsecurityprofiles("+profileId+")/systemuserprofiles_association("+userId+")/$ref");
+    },
+
+    // --- team membership -------------------------------------------------------------------------
+    // AddMembersTeam / RemoveMembersTeam rather than the $ref associate: Microsoft recommends them for
+    // both owner and user-created access teams, and they take a COLLECTION, so many users go in one call.
+    // The member key is written as `ownerid`, not systemuserid - systemuser inherits its OData key from
+    // `principal`, and without @odata.type the platform cannot tell a user from a team.
+    teamMembers:function(teamId, userIds, add){
+      var members = userIds.map(function(id){
+        return {"@odata.type":"Microsoft.Dynamics.CRM.systemuser", "ownerid":id};
+      });
+      var op = add ? "AddMembersTeam" : "RemoveMembersTeam";
+      if(PPTB) return window.dataverseAPI.execute({entityName:"team", entityId:teamId,
+                        operationName:op, operationType:"action", parameters:{Members:members}});
+      return freq("POST","teams("+teamId+")/Microsoft.Dynamics.CRM."+op, {"Members":members});
+    },
+
+    // --- business unit ---------------------------------------------------------------------------
+    // SetBusinessSystemUser, not a bare PATCH: it is what the admin centre's "Change business unit"
+    // panel does, and it is the only path where the record-ownership outcome is explicit rather than
+    // left to an org setting. ReassignPrincipal is REQUIRED - passing the same user is what makes them
+    // keep the records they already own.
+    setBusinessUnit:function(userId, buId, moveRecords){
+      var params = {
+        "BusinessUnit": {"@odata.type":"Microsoft.Dynamics.CRM.businessunit", "businessunitid": buId},
+        "ReassignPrincipal": {"@odata.type":"Microsoft.Dynamics.CRM.systemuser", "ownerid": userId},
+        "DoNotMoveAllRecords": !moveRecords
+      };
+      if(PPTB) return window.dataverseAPI.execute({entityName:"systemuser", entityId:userId,
+                        operationName:"SetBusinessSystemUser", operationType:"action", parameters:params});
+      return freq("POST","systemusers("+userId+")/Microsoft.Dynamics.CRM.SetBusinessSystemUser", {
+        "BusinessUnit": {"@odata.type":"Microsoft.Dynamics.CRM.businessunit", "businessunitid": buId},
+        "ReassignPrincipal": {"@odata.type":"Microsoft.Dynamics.CRM.systemuser", "ownerid": userId},
+        "DoNotMoveAllRecords": !moveRecords
+      });
+    },
+
+    assocRole:function(userId, roleId){
+      if(PPTB) return window.dataverseAPI.associate("systemuser", userId, "systemuserroles_association", "role", roleId);
+      return freq("POST","systemusers("+userId+")/systemuserroles_association/$ref",
+                  {"@odata.id": root+"roles("+roleId+")"});   // @odata.id must be absolute
+    },
+    unassocRole:function(userId, roleId){
+      if(PPTB) return window.dataverseAPI.disassociate("systemuser", userId, "systemuserroles_association", roleId);
+      return freq("DELETE","systemusers("+userId+")/systemuserroles_association("+roleId+")/$ref");
+    }
+  };
+}
+
+async function mapLimit(items, limit, fn, onProgress){
+  var out = new Array(items.length), i = 0, done = 0;
+  async function worker(){
+    while(i < items.length){
+      var idx = i++;
+      try{ out[idx] = await fn(items[idx], idx); }
+      catch(e){ out[idx] = {__error:e}; }
+      done++; if(onProgress) onProgress(done, items.length);
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(limit, items.length)||0}, worker));
+  return out;
+}
+
+/* ================================ loading ================================ */
+
+function classify(u){
+  if(u.applicationid) return "app";
+  var am = u.accessmode;
+  if(am===3 || am===5 || u.isintegrationuser===true) return "system";
+  if(am===4) return "noninteractive";
+  return "people";           // Read-Write (0), Administrative (1) and Read (2) are real people
+}
+
+async function loadOrg(){
+  var api = S.api;
+
+  boot("Reading the organisation", "who am I");
+  S.me = await api.whoAmI();
+  S.meId = lower(S.me && (S.me.UserId || S.me.userId));
+  // Without this the "you are changing your own account" confirmation can never fire, so say so loudly
+  // rather than quietly dropping a safety gate.
+  if(!S.meId) S.loadWarnings = (S.loadWarnings || []).concat(
+    ["WhoAmI did not return a user id, so the tool cannot tell which account is yours. The extra confirmation for changing your own access will not appear."]);
+
+  boot("Loading business units", "");
+  // Every $orderby ends on a unique column: paging without one duplicates and drops rows.
+  S.bus = await api.getAll("businessunits?$select=businessunitid,name,_parentbusinessunitid_value,isdisabled&$orderby=name asc,businessunitid asc", null, 5000);
+  S.busById = {}; S.bus.forEach(function(b){ S.busById[lower(b.businessunitid)] = b; });
+
+  boot("Loading security roles", "");
+  // componentstate 0 = Published; unpublished/soft-deleted solution rows would otherwise pollute this.
+  S.roles = await api.getAllTolerant(function(cols){
+      return "roles?$select="+cols.join(",")+"&$filter=componentstate eq 0&$orderby=name asc,roleid asc";
+    },
+    ["roleid","name","_businessunitid_value","_parentrootroleid_value"],
+    ["isautoassigned","_roletemplateid_value","isinherited","ismanaged"], 5000);
+  // getAllTolerant drops optional columns on a 400; if isautoassigned went, the licence-role
+  // protection is silently off, so Mirror mode must be withdrawn rather than quietly misbehave.
+  // The Web API omits null-valued properties, so a single sample row proves nothing — look for the
+  // column anywhere in the set before concluding it was dropped.
+  S.rolesHaveAutoAssigned = !S.roles.length || S.roles.some(function(r){ return "isautoassigned" in r; });
+  S.rolesById = {}; S.roles.forEach(function(r){
+    r._bu = lower(r._businessunitid_value);
+    r._root = lower(r._parentrootroleid_value) || lower(r.roleid);
+    r._tmpl = lower(r._roletemplateid_value);
+    S.rolesById[lower(r.roleid)] = r;
+  });
+
+  boot("Loading teams", "");
+  S.teams = await api.getAllTolerant(function(cols){
+      return "teams?$select="+cols.join(",")+"&$orderby=name asc,teamid asc";
+    },
+    ["teamid","name","teamtype","_businessunitid_value"],
+    ["isdefault","systemmanaged","membershiptype","azureactivedirectoryobjectid"], 5000);
+  S.teamsById = {}; S.teams.forEach(function(t){ S.teamsById[lower(t.teamid)] = t; });
+
+  // Team -> roles. Access teams (type 1) never carry roles, so skip them entirely.
+  var roleBearing = S.teams.filter(function(t){ return t.teamtype !== 1; });
+  boot("Loading team roles", roleBearing.length + " team(s)");
+  S.teamRoles = {};
+  S.loadWarnings = [];
+  var trRes = await mapLimit(roleBearing, 6, async function(t){
+    var rs = await api.teamRoles(t.teamid);
+    S.teamRoles[lower(t.teamid)] = rs.map(function(r){ return lower(r.roleid); });
+  }, function(d,n){ boot("Loading team roles", d+" / "+n); });
+  // mapLimit never throws; an unreported failure here would silently look like "this team has no roles"
+  trRes.forEach(function(r, i){
+    if(r && r.__error) S.loadWarnings.push("Could not read the roles of team “"+roleBearing[i].name+"”: "+(r.__error.message||r.__error));
+  });
+
+  // Column security profiles are organisation-owned - no per-business-unit copies to resolve.
+  boot("Loading column security profiles", "");
+  S.profiles = [];
+  try{
+    S.profiles = await api.getAllTolerant(function(cols){
+      return "fieldsecurityprofiles?$select="+cols.join(",")+"&$orderby=name asc,fieldsecurityprofileid asc";
+    }, ["fieldsecurityprofileid","name"], ["description","ismanaged"], 5000);
+  }catch(e){
+    // needs prvReadFieldSecurityProfile; without it the column-security features degrade rather than break
+    S.profileListError = e;
+  }
+  S.profilesById = {};
+  S.profiles.forEach(function(x){ S.profilesById[lower(x.fieldsecurityprofileid)] = x; });
+
+  boot("Loading users", "");
+  // One server-side pass over everything that is not soft-deleted in Entra; the People / Application /
+  // Non-interactive split is done client-side so the tool can always show you what it filtered out.
+  // applicationid leads the optional list because getAllTolerant drops from the END on a 400 — losing
+  // it would silently reclassify every application user as a person.
+  var REQ = ["systemuserid","fullname","domainname","internalemailaddress","isdisabled","accessmode","_businessunitid_value"];
+  var OPT = ["applicationid","isintegrationuser","azurestate","islicensed","title","setupuser"];
+  var EXPAND = "&$expand=systemuserroles_association($select=roleid,name),teammembership_association($select=teamid,name,teamtype)";
+
+  var users, expanded = true;
+  try{
+    users = await api.getAllTolerant(function(cols){
+      return "systemusers?$select="+cols.join(",")+EXPAND+"&$orderby=fullname asc,systemuserid asc";
+    }, REQ, OPT, 1000);
+  }catch(e){
+    // A single-level $expand of two N:N collections is legal, but it is two joins across the whole
+    // table and very large environments can refuse it. Fall back to plain rows + per-user lookups.
+    expanded = false;
+    users = await api.getAllTolerant(function(cols){
+      return "systemusers?$select="+cols.join(",")+"&$orderby=fullname asc,systemuserid asc";
+    }, REQ, OPT, 1000);
+  }
+
+  S.users = users.map(function(u){
+    u._id    = lower(u.systemuserid);
+    u._bu    = lower(u._businessunitid_value);
+    u._roles = (u.systemuserroles_association||[]).map(function(r){ return lower(r.roleid); });
+    u._teams = (u.teammembership_association||[]).map(function(t){ return lower(t.teamid); });
+    u._type  = classify(u);
+    u._name  = u.fullname || u.domainname || u.internalemailaddress || u.systemuserid;
+    return u;
+  }).filter(function(u){ return u.azurestate===undefined || u.azurestate===null || u.azurestate===0; });
+  S.usersById = {}; S.users.forEach(function(u){ S.usersById[u._id] = u; });
+
+  if(!expanded){
+    boot("Loading role and team membership", "one pass per user");
+    var memRes = await mapLimit(S.users, 8, async function(u){
+      var rs = await S.api.userRoles(u.systemuserid);
+      var ts = await S.api.userTeams(u.systemuserid);
+      u._roles = rs.map(function(r){ return lower(r.roleid); });
+      u._teams = ts.map(function(t){ return lower(t.teamid); });
+    }, function(d,n){ boot("Loading role and team membership", d+" / "+n); });
+    var bad = memRes.filter(function(r){ return r && r.__error; }).length;
+    if(bad) S.loadWarnings.push(bad+" user(s) had their roles and teams fail to load, and are shown as having none.");
+  }
+  S.expandedLoad = expanded;
+
+  bootDone();
+}
+
+/* Roles a user effectively has: assigned directly plus everything their (non-access) teams carry. */
+function effectiveRoles(u){
+  var out = [], seen = {};
+  u._roles.forEach(function(rid){
+    if(seen[rid]) return; seen[rid]=1;
+    out.push({roleId:rid, via:"direct", viaName:null});
+  });
+  u._teams.forEach(function(tid){
+    var t = S.teamsById[tid];
+    if(!t || t.teamtype === 1) return;             // access teams confer no roles
+    (S.teamRoles[tid]||[]).forEach(function(rid){
+      if(seen[rid]) return; seen[rid]=1;
+      out.push({roleId:rid, via:"team", viaName:t.name});
+    });
+  });
+  return out;
+}
+/* Which teams accept a manual membership change. Getting this wrong means a confident-looking plan that
+   the platform rejects row by row, so it is checked up front rather than discovered in the log. */
+function teamEditable(t){
+  if(!t) return "That team no longer exists.";
+  if(t.isdefault === true)
+    return "It is a business unit's default team — the platform manages its membership. Change the user's business unit instead.";
+  if(t.teamtype === 2 || t.teamtype === 3)
+    return "It is a Microsoft Entra group team — membership comes from the Entra group and must be changed there.";
+  if(t.teamtype === 1 && t.systemmanaged === true)
+    return "It is a system-managed access team, created automatically for one record. Membership is managed through that record.";
+  // getAllTolerant drops optional columns on a 400. Without isdefault/systemmanaged the two blocks above
+  // cannot be evaluated, and guessing "editable" would mean planning writes the platform will reject.
+  if(!("isdefault" in t))
+    return "This environment did not return the team's isdefault column, so the tool cannot tell whether it is a default business unit team.";
+  if(t.teamtype === 1 && !("systemmanaged" in t))
+    return "This environment did not return the team's systemmanaged column, so the tool cannot tell whether this access team is system-managed.";
+  return null;                      // owner teams and user-created access teams are fine
+}
+function isSysAdmin(u){
+  return effectiveRoles(u).some(function(r){
+    var role = S.rolesById[r.roleId];
+    return role && role._tmpl === SYSADMIN_TEMPLATE;
+  });
+}
+
+/* ---- table / privilege metadata (lazy: this is the big payload) ---- */
+async function loadMeta(){
+  if(S.meta) return S.meta;
+  if(S.metaLoading) return S.metaLoading;
+  S.metaLoading = (async function(){
+    boot("Loading table metadata", "privileges for every table — this is the big one");
+    var lcid = await uiLanguage();
+
+    var res = await S.api.tablePrivileges(lcid);
+
+    var tables = [], privIndex = {};
+    // the collection form wraps in value[]; a single-entity form would not, so handle both
+    var list = (res && res.value) ? res.value : (res && res.LogicalName ? [res] : null);
+    if(!list) throw new Error("The table metadata came back in an unexpected shape, so the tool cannot say what any role grants.");
+    list.forEach(function(t){
+      var privs = t.Privileges || [];
+      if(!privs.length) return;                    // nothing securable on this table
+      var label = t.LogicalName;
+      try{
+        var d = t.DisplayName;
+        if(d){
+          if(d.UserLocalizedLabel && d.UserLocalizedLabel.Label) label = d.UserLocalizedLabel.Label;
+          else if(d.LocalizedLabels && d.LocalizedLabels.length && d.LocalizedLabels[0].Label) label = d.LocalizedLabels[0].Label;
+        }
+      }catch(e){}
+      var rec = {logical:t.LogicalName, label:label, otc:t.ObjectTypeCode, verbs:{}};
+      privs.forEach(function(p){
+        // PrivilegeType arrives as the enum member NAME ("Read"), not the integer.
+        var v = p.PrivilegeType;
+        if(typeof v === "number"){
+          v = ["None","Create","Read","Write","Delete","Assign","Share","Append","AppendTo"][v] || null;
+        }
+        if(!v || v === "None") return;
+        var pid = lower(p.PrivilegeId);
+        rec.verbs[v] = pid;
+        privIndex[pid] = {table:rec, verb:v};
+      });
+      tables.push(rec);
+    });
+    if(!tables.length) throw new Error("No securable tables came back from the metadata query. That is never true of a real environment, so the response could not be trusted.");
+    tables.sort(function(a,b){ return a.label.localeCompare(b.label); });
+    S.meta = {tables:tables, privIndex:privIndex};
+    bootDone();
+    return S.meta;
+  })().catch(function(e){
+    S.metaLoading = null;    // let the next attempt retry rather than failing forever
+    bootDone();
+    throw e;
+  });
+  return S.metaLoading;
+}
+
+/* ---- per-role privileges (cached; one unbound function call per role) ---- */
+async function loadRolePrivs(roleId){
+  roleId = lower(roleId);
+  if(S.rolePrivs[roleId]) return S.rolePrivs[roleId];
+  var entry = {byPriv:{}, count:0, error:null};
+  try{
+    // Depth comes back as the enum NAME, which avoids the undocumented privilegedepthmask integers.
+    var r = await S.api.rolePrivileges(roleId);
+    (r && r.RolePrivileges || []).forEach(function(rp){
+      var d = rp.Depth;
+      // A numeric Depth here is the PrivilegeDepth ENUM (0-4) - NOT privilegedepthmask (1/2/4/8).
+      // Reading it with the mask table would shift every level by a power of two.
+      if(typeof d === "number") d = DEPTH_ENUM[d] || MASK_DEPTH[d] || String(d);
+      entry.byPriv[lower(rp.PrivilegeId)] = d;
+      entry.count++;
+    });
+  }catch(e){
+    // a transient 401/429 must not poison the cache for the rest of the session
+    entry.error = e.message || String(e);
+    return entry;
+  }
+  S.rolePrivs[roleId] = entry;
+  return entry;
+}
+
+/* ---- stack a user's roles into per-table, per-verb effective depth ---- */
+async function computePermissions(u){
+  var meta = await loadMeta();
+  var roles = effectiveRoles(u);
+
+  boot("Reading role privileges", roles.length + " role(s)");
+  // Take the results from mapLimit rather than re-reading S.rolePrivs: a failed read is deliberately
+  // NOT cached (so it can be retried), which would otherwise make the failure invisible here.
+  var loaded = await mapLimit(roles, 4, function(r){ return loadRolePrivs(r.roleId); },
+                 function(d,n){ boot("Reading role privileges", d+" / "+n); });
+  bootDone();
+
+  // privilegeId -> [{depth, roleId, via, viaName}]
+  var grants = {};
+  var failed = [];
+  roles.forEach(function(r, i){
+    var rp = loaded[i];
+    if(rp && rp.__error) rp = {error: rp.__error.message || String(rp.__error)};
+    if(!rp){ failed.push({role:S.rolesById[r.roleId], error:"no response"}); return; }
+    if(rp.error){ failed.push({role:S.rolesById[r.roleId], error:rp.error}); return; }
+    for(var pid in rp.byPriv){
+      (grants[pid] = grants[pid] || []).push({depth:rp.byPriv[pid], roleId:r.roleId, via:r.via, viaName:r.viaName});
+    }
+  });
+
+  // Per-table column-security counts. Deliberately best-effort - reading field permissions needs
+  // administrator rights, and the table grid must still be useful to someone who lacks them.
+  var byTable = null, colsError = null, colsPartial = null;
+  try{
+    var ca = await columnAccessFor(u);
+    // A profile we could not open means the count is a FLOOR, not an answer. Say so rather than
+    // printing a confident number that under-reports the user's access.
+    if(ca.failed.length || ca.unreadTeams.length)
+      colsPartial = ca.failed.map(function(f){ return f.profile.name; }).concat(ca.unreadTeams);
+    byTable = {};
+    ca.rows.forEach(function(cr){
+      var k = norm(cr.col.table);
+      var e = byTable[k] || (byTable[k] = {total:0, reachable:0});
+      e.total++;
+      if(cr.any) e.reachable++;
+    });
+  }catch(e){ colsError = e; }
+
+  var rows = meta.tables.map(function(t){
+    var cells = {}, any = false, write = false;
+    VERBS.forEach(function(v){
+      var pid = t.verbs[v.key];
+      var gs  = pid ? grants[pid] : null;
+      if(!gs || !gs.length){ cells[v.key] = null; return; }
+      var best = null;
+      gs.forEach(function(g){
+        var d = DEPTH[g.depth];
+        if(!d) return;                                   // unknown depth: ignore for ranking
+        if(!best || d.rank > DEPTH[best.depth].rank) best = g;
+      });
+      if(!best) best = gs[0];
+      cells[v.key] = {depth:best.depth, sources:gs};
+      any = true;
+      if(v.key==="Create" || v.key==="Write" || v.key==="Delete") write = true;
+    });
+    return {table:t, cells:cells, any:any, write:write, cs:(byTable ? byTable[norm(t.logical)] : null)};
+  });
+
+  return {rows:rows, roles:roles, failed:failed, colsError:colsError, haveCols:!!byTable,
+          colsPartial:colsPartial};
+}
+
+/* ================================ column security ================================ */
+
+/* Every secured column in the environment. This is metadata, so any user can read it - which matters,
+   because the field permissions themselves need prvReadFieldPermission and will fail for a non-admin. */
+var _lcid = null;
+async function uiLanguage(){
+  if(_lcid) return _lcid;
+  _lcid = 1033;
+  try{
+    var us = await S.api.get("usersettingscollection?$select=uilanguageid" +
+      (S.meId ? "&$filter=systemuserid eq " + S.meId : "&$top=1"));
+    if(us && us.value && us.value.length && us.value[0].uilanguageid) _lcid = us.value[0].uilanguageid;
+  }catch(e){}
+  return _lcid;
+}
+async function loadSecuredColumns(){
+  if(S.secured) return S.secured;
+  if(S.securedLoading) return S.securedLoading;
+  S.securedLoading = (async function(){
+    boot("Looking for secured columns", "column-level security metadata");
+    var res = PPTB ? await S.api.securedColumnsViaProfile()
+                   : await S.api.securedColumns(await uiLanguage());
+    // A malformed response must NOT collapse to "nothing is secured" - that is an affirmative
+    // security conclusion drawn from a parse failure, and it is the worst answer this tab can give.
+    if(!res || !Array.isArray(res.value))
+      throw new Error("The secured-column metadata came back in an unexpected shape, so the tool cannot say what is secured here.");
+    var list = res.value;
+    var out = [];
+    list.forEach(function(t){
+      (t.Attributes || []).forEach(function(a){
+        if(a.IsSecured !== true) return;
+        out.push({
+          table: t.LogicalName,
+          tableLabel: metaLabel(t.DisplayName) || t._label || t.SchemaName || t.LogicalName,
+          column: a.LogicalName,
+          columnLabel: metaLabel(a.DisplayName) || a.LogicalName
+        });
+      });
+    });
+    out.sort(function(a,b){
+      return a.tableLabel.localeCompare(b.tableLabel) || a.columnLabel.localeCompare(b.columnLabel);
+    });
+    S.secured = out;
+    bootDone();
+    return out;
+  })().catch(function(e){ S.securedLoading = null; bootDone(); throw e; });
+  return S.securedLoading;
+}
+function metaLabel(d){
+  try{
+    if(!d) return null;
+    if(d.UserLocalizedLabel && d.UserLocalizedLabel.Label) return d.UserLocalizedLabel.Label;
+    if(d.LocalizedLabels && d.LocalizedLabels.length && d.LocalizedLabels[0].Label) return d.LocalizedLabels[0].Label;
+  }catch(e){}
+  return null;
+}
+
+/* The Column Security Profiles a user holds: assigned directly, plus any carried by their teams.
+   systemuserprofiles_association returns ONLY direct assignments - team-derived ones are invisible to it. */
+async function userSecurityProfiles(u){
+  var out = [], seen = {};
+  var direct = await S.api.userProfiles(u.systemuserid);
+  direct.forEach(function(pr){
+    var id = lower(pr.fieldsecurityprofileid);
+    if(seen[id]) return; seen[id] = 1;
+    out.push({id:id, name:pr.name, via:"direct", viaName:null});
+  });
+  var teams = u._teams.map(function(t){ return S.teamsById[t]; })
+                      .filter(function(t){ return t && t.teamtype !== 1; });   // access teams carry none
+  var got = await mapLimit(teams, 5, function(t){ return S.api.teamProfiles(t.teamid); });
+  var unread = [];
+  got.forEach(function(ps, i){
+    // mapLimit never throws - it substitutes a sentinel. An unreported failure here would look
+    // exactly like "this team carries no profiles", which is the wrong answer to give quietly.
+    if(!ps || ps.__error){ unread.push(teams[i].name); return; }
+    ps.forEach(function(pr){
+      var id = lower(pr.fieldsecurityprofileid);
+      if(seen[id]) return; seen[id] = 1;
+      out.push({id:id, name:pr.name, via:"team", viaName:teams[i].name});
+    });
+  });
+  out.unread = unread;
+  return out;
+}
+
+async function loadProfilePerms(profileId){
+  profileId = lower(profileId);
+  if(S.profilePerms[profileId]) return S.profilePerms[profileId];
+  var entry = {byKey:{}, count:0, error:null};
+  try{
+    var rows = await S.api.profilePermissions(profileId);
+    rows.forEach(function(r){
+      if(!r.entityname || !r.attributelogicalname) return;
+      entry.byKey[norm(r.entityname) + "." + norm(r.attributelogicalname)] = {
+        read:r.canread, create:r.cancreate, update:r.canupdate, unmasked:r.canreadunmasked
+      };
+      entry.count++;
+    });
+  }catch(e){
+    entry.error = e;
+    return entry;                       // not cached: a 403 or a blip must not stick for the session
+  }
+  S.profilePerms[profileId] = entry;
+  return entry;
+}
+
+/* Secured columns are DENY BY DEFAULT: with no profile grant there is no access, whatever the
+   table-level privileges say. Several profiles combine as a union - most permissive wins, no deny. */
+/* Both tabs need this, so compute it once per user. Cached on the user id: the underlying secured-column
+   metadata and per-profile permissions are cached too, but the fold across them is not free. */
+async function columnAccessFor(u){
+  var key = u._id;
+  if(S.colCache[key]) return S.colCache[key];
+  var res = await computeColumnAccess(u);
+  // Only cache a COMPLETE answer. A partial one - some profile unreadable - would otherwise be frozen
+  // for the rest of the session, long after whatever caused it had cleared.
+  if(!res.failed.length && !res.unreadTeams.length) S.colCache[key] = res;
+  return res;
+}
+async function computeColumnAccess(u){
+  var secured  = await loadSecuredColumns();
+  var profiles = await userSecurityProfiles(u);
+  var admin    = isSysAdmin(u);
+
+  var loaded = await mapLimit(profiles, 4, function(pr){ return loadProfilePerms(pr.id); },
+                              function(d,n){ boot("Reading column security profiles", d+" / "+n); });
+  bootDone();
+
+  var failed = [], grants = {};          // 'table.column' -> [{perm, profile}]
+  profiles.forEach(function(pr, i){
+    var pp = loaded[i];
+    if(pp && pp.__error) pp = {error: pp.__error};
+    if(!pp || pp.error){ failed.push({profile:pr, error:pp && pp.error}); return; }
+    for(var k in pp.byKey) (grants[k] = grants[k] || []).push({perm:pp.byKey[k], profile:pr});
+  });
+
+  var rows = secured.map(function(c){
+    var g = grants[norm(c.table) + "." + norm(c.column)] || [];
+    // System Administrators are never subject to column security at all.
+    var read   = admin || g.some(function(x){ return fsAllowed(x.perm.read); });
+    var create = admin || g.some(function(x){ return fsAllowed(x.perm.create); });
+    var update = admin || g.some(function(x){ return fsAllowed(x.perm.update); });
+    var unmasked = admin ? 3 : 0;      // the bypass covers masking too, not just read/create/update
+    g.forEach(function(x){
+      var v = Number(x.perm.unmasked);
+      if(isNaN(v)){
+        // A label, if some host returns one. This choice has THREE levels, so it must not be routed
+        // through the two-valued fsAllowed - that would report "All records" as the far weaker
+        // "One record", understating the most privileged setting in the whole feature.
+        var t = norm(x.perm.unmasked);
+        v = t.indexOf("all") === 0 ? 3 : t.indexOf("one") === 0 ? 1 : 0;
+      }
+      if(v > unmasked) unmasked = v;
+    });
+    return {col:c, read:read, create:create, update:update, unmasked:unmasked,
+            sources:g.filter(function(x){
+              return fsAllowed(x.perm.read) || fsAllowed(x.perm.create) || fsAllowed(x.perm.update);
+            }),
+            any:(read || create || update)};
+  });
+
+  return {rows:rows, profiles:profiles, failed:failed, admin:admin, unreadTeams:profiles.unread || []};
+}
+
+function yesNo(on, label){
+  // The visible text carries the meaning and the column header supplies the verb, so no aria-label:
+  // on a bare <span> it would be ignored anyway, and on a cell it would fight the header.
+  return el("span",{class:"badge " + (on ? "ok" : ""), text: on ? "Yes" : "No", title: label});
+}
+function filteredCols(){
+  if(!S.colRows) return [];
+  var q = norm($("kSearch").value), show = $("kShow").value;
+  var rows = S.colRows.rows.filter(function(r){
+    if(S.colTableFilter && norm(r.col.table) !== norm(S.colTableFilter)) return false;
+    if(show === "any"  && !r.any) return false;
+    if(show === "none" &&  r.any) return false;
+    if(q && norm(r.col.tableLabel).indexOf(q) < 0 && norm(r.col.table).indexOf(q) < 0 &&
+            norm(r.col.columnLabel).indexOf(q) < 0 && norm(r.col.column).indexOf(q) < 0) return false;
+    return true;
+  });
+  var k = S.ksort.key, dir = S.ksort.dir;
+  rows.sort(function(a,b){
+    var av = k === "column" ? a.col.columnLabel : a.col.tableLabel;
+    var bv = k === "column" ? b.col.columnLabel : b.col.tableLabel;
+    return (av.localeCompare(bv) * dir) || a.col.columnLabel.localeCompare(b.col.columnLabel);
+  });
+  return rows;
+}
+function renderCols(){
+  var body = $("colsBody"); clear(body);
+  if(!S.colRows){ $("colsFoot").textContent = ""; return; }
+
+  var rows = filteredCols(), CAP = 600;
+  rows.slice(0, CAP).forEach(function(r){
+    var by = el("div",{class:"pills"});
+    r.sources.forEach(function(sc){
+      by.appendChild(rolePill({name:sc.profile.name, via:sc.profile.via, team:sc.profile.viaName}));
+    });
+    if(!r.sources.length)
+      by.appendChild(el("span",{class:"muted", text: S.colRows.admin ? "System Administrator" : EMDASH}));
+
+    body.appendChild(el("tr",null,[
+      el("td",null,[ el("div",{text:r.col.tableLabel}),  el("div",{class:"muted mono", text:r.col.table}) ]),
+      el("td",null,[ el("div",{text:r.col.columnLabel}), el("div",{class:"muted mono", text:r.col.column}) ]),
+      el("td",{class:"v"},[ yesNo(r.read,   "Read") ]),
+      el("td",{class:"v"},[ yesNo(r.create, "Create") ]),
+      el("td",{class:"v"},[ yesNo(r.update, "Update") ]),
+      el("td",{class:"v"},[ r.unmasked
+        ? el("span",{class:"badge warn", text: UNMASKED[r.unmasked] || String(r.unmasked),
+            title:"Can read the real value behind a masking rule"})
+        : el("span",{class:"muted", text:EMDASH}) ]),
+      el("td",null,[by])
+    ]));
+  });
+
+  if(S.colTableFilter){
+    var pin = el("p",{class:"hint"},[
+      document.createTextNode("Showing only " + S.colTableFilter + ".  "),
+      el("button",{class:"subtle", type:"button", text:"Show all tables",
+        onclick:function(){ S.colTableFilter = null; renderCols(); }})]);
+    $("colsFoot").textContent = "";
+    $("colsFoot").appendChild(pin);
+    return;
+  }
+  $("colsFoot").textContent = rows.length > CAP
+    ? "Showing the first " + CAP + " of " + rows.length + " secured columns - search to narrow it down."
+    : rows.length + " secured column(s)";
+}
+async function refreshCols(){
+  var run = ++_colRun, res;               // claim the run BEFORE any early return, or a superseded
+  var u = S.usersById[$("kUser").value];  // request can come back and repaint a cleared panel
+  clear($("colHead"));
+  if(!u){ S.colRows = null; S.colUser = null; renderCols(); return; }
+
+  try{
+    res = await columnAccessFor(u);       // shared with the Table access tab's CS column
+  }catch(e){
+    if(run !== _colRun) return;
+    bootDone();
+    S.colRows = null; S.colUser = null;
+    banner("colHead","error","Could not read column security.", (e && e.message) || String(e));
+    renderCols();
+    return;
+  }
+  if(run !== _colRun) return;
+  S.colUser = u; S.colRows = res;
+  S.colCache[u._id] = res;
+
+  var head = $("colHead");
+
+  if(!S.secured.length){
+    head.appendChild(el("div",{class:"bar ok"},[
+      el("b",{text:"No columns in this environment are secured."}),
+      document.createTextNode("Column-level security is not in use here, so nothing is hidden at column level and every user sees whatever their table privileges allow.")]));
+    $("tcCols").textContent = "(0)";
+    renderCols();
+    return;
+  }
+
+  head.appendChild(el("dl",{class:"kv"},[
+    el("dt",{text:"User"}),     el("dd",{text:u._name + (u.domainname ? "  (" + u.domainname + ")" : "")}),
+    el("dt",{text:"Profiles"}), el("dd",{text: res.profiles.length
+      ? res.profiles.filter(function(x){ return x.via === "direct"; }).length + " assigned directly, " +
+        res.profiles.filter(function(x){ return x.via === "team"; }).length + " through teams"
+      : "None"}),
+    el("dt",{text:"Columns"}),  el("dd",{text: res.rows.filter(function(r){ return r.any; }).length +
+      " reachable, of " + res.rows.length + " secured in this environment"})
+  ]));
+
+  if(res.profiles.length){
+    var pills = el("div",{class:"pills", style:"margin-top:8px"});
+    res.profiles.forEach(function(pr){
+      pills.appendChild(rolePill({name:pr.name, via:pr.via, team:pr.viaName}));
+    });
+    head.appendChild(pills);
+  }
+
+  if(res.admin)
+    head.appendChild(el("div",{class:"bar warn"},[
+      el("b",{text:"This user is a System Administrator."}),
+      document.createTextNode("Column security never applies to that role, so they can read and write every secured column whether or not a profile grants it.")]));
+  else if(!res.profiles.length)
+    head.appendChild(el("div",{class:"bar"},[
+      el("b",{text:"This user holds no Column Security Profile."}),
+      document.createTextNode("Secured columns are hidden by default, so none of the columns below are visible to them - whatever their table privileges say.")]));
+
+  if(res.unreadTeams.length)
+    head.appendChild(el("div",{class:"bar error"},[
+      el("b",{text:"Could not read the column security profiles of " + res.unreadTeams.length + " team(s): " +
+        res.unreadTeams.join(", ")}),
+      document.createTextNode(" Any profile those teams carry is missing from the grid below, so this user may have more access than is shown.")]));
+
+  if(res.failed.length)
+    head.appendChild(el("div",{class:"bar error"},[
+      el("b",{text:"Could not read " + res.failed.length + " profile(s): " +
+        res.failed.map(function(f){ return f.profile.name; }).join(", ")}),
+      document.createTextNode(" Reading column permissions needs the Read privilege on the Field Permission table, which in practice means an administrator. The grid below is incomplete.")]));
+
+  $("tcCols").textContent = "(" + res.rows.filter(function(r){ return r.any; }).length + ")";
+  renderCols();
+}
+function exportCols(){
+  if(!S.colRows) return;
+  var u = S.colUser;
+  var rows = [["User", u._name], ["Username", u.domainname || ""],
+              ["Column security profiles", S.colRows.profiles.length
+                 ? S.colRows.profiles.map(function(pr){
+                     return pr.name + (pr.via === "team" ? " (via " + pr.viaName + ")" : ""); }).join("; ")
+                 : "None"]];
+  // the CSV must carry every qualifier the screen shows, or it reads as more certain than it is
+  if(S.colRows.admin)
+    rows.push(["NOTE","This user is a System Administrator. Column security never applies to that role, so every column below is marked accessible regardless of any profile."]);
+  if(S.colRows.failed.length)
+    rows.push(["WARNING","Could not read " + S.colRows.failed.length + " profile(s): " +
+      S.colRows.failed.map(function(f){ return f.profile.name; }).join("; ") + ". This export is incomplete."]);
+  if(S.colRows.unreadTeams.length)
+    rows.push(["WARNING","Could not read the profiles of team(s): " + S.colRows.unreadTeams.join("; ") +
+      ". The user may have more access than this export shows."]);
+  rows = rows.concat([[],
+              ["Table","Table name","Column","Column name","Read","Create","Update","Unmasked","Granted by"]]);
+  filteredCols().forEach(function(r){
+    rows.push([r.col.tableLabel, r.col.table, r.col.columnLabel, r.col.column,
+      r.read ? "Yes" : "No", r.create ? "Yes" : "No", r.update ? "Yes" : "No",
+      r.unmasked ? (UNMASKED[r.unmasked] || r.unmasked) : "",
+      r.sources.map(function(sc){
+        return sc.profile.name + (sc.profile.via === "team" ? " (via " + sc.profile.viaName + ")" : ""); }).join("; ")]);
+  });
+  download("column-security-" + (u.domainname || u._name).replace(/[^\w.@-]+/g, "_") + ".csv", rows);
+}
+
+/* ================================ rendering: users ================================ */
+function typeBadge(t){
+  var m = {people:["ok","Person"], app:["warn","Application"], noninteractive:["","Non-interactive"], system:["","System"]};
+  var v = m[t] || ["","?"];
+  return el("span",{class:"badge "+v[0], text:v[1]});
+}
+function roleNames(u){
+  var out = [], seen = {};
+  u._roles.forEach(function(rid){
+    var r = S.rolesById[rid]; if(!r) return;
+    if(seen[r.name]) return; seen[r.name]=1;
+    out.push({name:r.name, via:"direct"});
+  });
+  u._teams.forEach(function(tid){
+    var t = S.teamsById[tid]; if(!t || t.teamtype===1) return;
+    (S.teamRoles[tid]||[]).forEach(function(rid){
+      var r = S.rolesById[rid]; if(!r) return;
+      if(seen[r.name]) return; seen[r.name]=1;
+      out.push({name:r.name, via:"team", team:t.name});
+    });
+  });
+  return out;
+}
+/* Where a role came from has to be visible, not hover-only: an inherited role cannot be removed from
+   the user, and mistaking one for a direct assignment is the most common misreading of this data. */
+function rolePill(n){
+  var team = n.via === "team";
+  return el("span",{class:"pill" + (team ? " team" : ""),
+    title: team ? "Inherited from team: " + (n.team || n.viaName) : "Assigned directly to this user"},[
+    el("span",{class:"pill-src", text: team ? "TEAM" : "DIRECT",
+      "aria-label": team ? "Inherited from team" : "Assigned directly"}),
+    document.createTextNode(n.name),
+    team ? el("span",{class:"pill-via", text:" \u00b7 " + (n.team || n.viaName)}) : null
+  ]);
+}
+function filteredUsers(){
+  var q    = norm($("fSearch").value);
+  var type = $("fType").value;
+  var bu   = $("fBu").value;
+  var role = $("fRole").value;
+  var team = $("fTeam").value;
+  var incDisabled = $("fDisabled").checked;
+  var onlyNone    = $("fNoRoles").checked;
+
+  var list = S.users.filter(function(u){
+    if(!incDisabled && u.isdisabled === true) return false;
+    if(type !== "all" && u._type !== type) return false;
+    if(bu && u._bu !== bu) return false;
+    if(q){
+      var hay = norm(u._name)+" "+norm(u.domainname)+" "+norm(u.internalemailaddress)+" "+norm(u.title);
+      if(hay.indexOf(q) < 0) return false;
+    }
+    if(role){
+      var has = effectiveRoles(u).some(function(r){
+        var rr = S.rolesById[r.roleId];
+        return rr && rr._root === role;
+      });
+      if(!has) return false;
+    }
+    if(team && u._teams.indexOf(team) < 0) return false;
+    if(onlyNone && effectiveRoles(u).length) return false;
+    return true;
+  });
+
+  var k = S.sort.key, dir = S.sort.dir;
+  list.sort(function(a,b){
+    var av,bv;
+    if(k==="name"){ av=norm(a._name); bv=norm(b._name); }
+    else if(k==="bu"){ av=norm((S.busById[a._bu]||{}).name); bv=norm((S.busById[b._bu]||{}).name); }
+    else if(k==="type"){ av=a._type; bv=b._type; }
+    else if(k==="roles"){ av=effectiveRoles(a).length; bv=effectiveRoles(b).length; }
+    // count the same way the cells do - roleNames() de-duplicates by NAME across direct and team
+    else if(k==="direct"){
+      av=roleNames(a).filter(function(n){ return n.via==="direct"; }).length;
+      bv=roleNames(b).filter(function(n){ return n.via==="direct"; }).length; }
+    else if(k==="inherited"){
+      av=roleNames(a).filter(function(n){ return n.via==="team"; }).length;
+      bv=roleNames(b).filter(function(n){ return n.via==="team"; }).length; }
+    else { av=a._teams.length; bv=b._teams.length; }
+    if(av<bv) return -1*dir; if(av>bv) return 1*dir;
+    return norm(a._name).localeCompare(norm(b._name));
+  });
+  return list;
+}
+function renderUsers(){
+  var list = filteredUsers();
+  var body = $("usersBody");
+  clear(body);
+
+  list.forEach(function(u){
+    var eff   = effectiveRoles(u);
+    var names = roleNames(u);
+    var tr = el("tr",{class:S.selected[u._id]?"sel":""});
+
+    var cb = el("input",{type:"checkbox", "aria-label":"Select "+u._name});
+    cb.checked = !!S.selected[u._id];
+    cb.addEventListener("change", function(){
+      if(cb.checked) S.selected[u._id]=true; else delete S.selected[u._id];
+      tr.classList.toggle("sel", cb.checked);
+      onSelectionChanged();
+    });
+    tr.appendChild(el("td",null,[cb]));
+
+    var who = el("td",null,[
+      el("div",{text:u._name, style:"font-weight:600"}),
+      el("div",{class:"muted mono", text:u.domainname || u.internalemailaddress || ""}),
+      u.isdisabled===true ? el("span",{class:"badge danger",text:"Disabled"}) : null,
+      u.setupuser===true ? el("span",{class:"badge",text:"Setup user"}) : null
+    ]);
+    tr.appendChild(who);
+
+    tr.appendChild(el("td",{text:(S.busById[u._bu]||{}).name || ""}));
+
+    var td = el("td",null,[ typeBadge(u._type) ]);
+    if(u.accessmode!=null && u._type!=="people")
+      td.appendChild(el("div",{class:"muted", style:"font-size:11px", text:ACCESS_MODE[u.accessmode]||("mode "+u.accessmode)}));
+    tr.appendChild(td);
+
+    var nDirect = names.filter(function(n){ return n.via === "direct"; }).length;
+    var nTeam   = names.length - nDirect;
+    tr.appendChild(el("td",{class:"num", text:String(nDirect)}));
+    tr.appendChild(el("td",{class:"num" + (nTeam ? "" : " muted"), text:String(nTeam)}));
+
+    var pills = el("div",{class:"pills"});
+    names.slice(0,6).forEach(function(n){ pills.appendChild(rolePill(n)); });
+    if(names.length > 6) pills.appendChild(el("span",{class:"pill team", text:"+"+(names.length-6)+" more"}));
+    if(!names.length) pills.appendChild(el("span",{class:"badge danger", text:"No roles"}));
+    tr.appendChild(el("td",null,[pills]));
+
+    tr.appendChild(el("td",{class:"num", text:String(u._teams.length),
+      title:u._teams.map(function(t){ return (S.teamsById[t]||{}).name; }).filter(Boolean).join(", ")}));
+
+    tr.appendChild(el("td",{class:"nowrap"},[
+      el("button",{class:"subtle", type:"button", text:"Table access",
+        onclick:function(){ openPermsFor(u._id); }}),
+      el("button",{class:"subtle", type:"button", text:"Columns",
+        onclick:function(){ openColsFor(u._id); }})
+    ]));
+
+    body.appendChild(tr);
+  });
+
+  $("usersSummary").textContent = list.length + " of " + S.users.length + " users shown";
+  $("tcUsers").textContent = "(" + S.users.filter(function(u){ return u._type==="people" && u.isdisabled!==true; }).length + ")";
+
+  var noRole = list.filter(function(u){ return u._type==="people" && u.isdisabled!==true && !effectiveRoles(u).length; }).length;
+  if(noRole) banner("usersBanner","warn", noRole+" active "+(noRole===1?"person has":"people have")+" no security role. ",
+    "Dataverse denies access to any user without at least one role, so they cannot sign in to a model-driven app.");
+  else clearBanner("usersBanner");
+}
+function onSelectionChanged(){
+  var n = Object.keys(S.selected).length;
+  $("tcCopy").textContent = n ? "("+n+")" : "";
+  renderCopyTargets();
+}
+
+/* ================================ rendering: permissions ================================ */
+function cellButton(verb, cell, tableLabel){
+  if(!cell) return el("span",{class:"cell d0", text:"—", title:verb.label+": none",
+                              "aria-label":verb.label+": none"});
+  var d = DEPTH[cell.depth] || {cls:"", short:"?", label:cell.depth};
+  var b = el("button",{class:"cell "+d.cls, type:"button", text:d.short,
+    title:verb.label+": "+d.label+" — click to see which roles grant it",
+    "aria-label":verb.label+" on "+tableLabel+": "+d.label});
+  b.addEventListener("click", function(){ showWhy(tableLabel, verb, cell); });
+  return b;
+}
+function showWhy(tableLabel, verb, cell){
+  var rows = cell.sources.slice().sort(function(a,b){
+    return (DEPTH[b.depth]||{rank:-1}).rank - (DEPTH[a.depth]||{rank:-1}).rank;
+  });
+  var t = el("table",null,[
+    el("thead",null,[el("tr",null,[el("th",{text:"Security role"}),el("th",{text:"Access level"}),el("th",{text:"How"})])]),
+    el("tbody",null, rows.map(function(g){
+      var role = S.rolesById[g.roleId] || {name:g.roleId};
+      var d = DEPTH[g.depth] || {short:"?", label:g.depth, cls:""};
+      return el("tr",null,[
+        el("td",{text:role.name}),
+        el("td",null,[el("span",{class:"cell "+d.cls, text:d.short}), document.createTextNode(" "+d.label)]),
+        el("td",null,[ el("span",{class:"pill-src" + (g.via==="team" ? " team" : ""),
+            text:g.via==="team" ? "TEAM" : "DIRECT"}),
+          document.createTextNode(g.via==="team" ? " via " + g.viaName : " to this user") ])
+      ]);
+    }))
+  ]);
+  modal(verb.label + " on " + tableLabel, [
+    el("p",{class:"hint", text:"Dataverse takes the highest access level across every role, so the top row is the one that applies."}),
+    el("div",{class:"scroll", style:"max-height:50vh"},[t])
+  ]);
+}
+function filteredPerms(){
+  if(!S.permRows) return [];
+  var q    = norm($("pSearch").value);
+  var show = $("pShow").value;
+
+  var rows = S.permRows.rows.filter(function(r){
+    if(show==="any"   && !r.any) return false;
+    if(show==="none"  &&  r.any) return false;
+    if(show==="write" && !r.write) return false;
+    if(q && norm(r.table.label).indexOf(q)<0 && norm(r.table.logical).indexOf(q)<0) return false;
+    return true;
+  });
+
+  var k = S.psort.key, dir = S.psort.dir;
+  rows.sort(function(a,b){
+    var av = k==="logical" ? a.table.logical : norm(a.table.label);
+    var bv = k==="logical" ? b.table.logical : norm(b.table.label);
+    return av < bv ? -1*dir : av > bv ? 1*dir : 0;
+  });
+  return rows;
+}
+/* How many of this table's secured columns the user can actually reach. Clicking through opens the
+   Column security tab already filtered to this table. */
+function csCell(r){
+  if(!S.permRows.haveCols)
+    return el("span",{class:"cell d0", text:"?", title:"Column security could not be read - see the note above the grid"});
+  if(!r.cs || !r.cs.total)
+    return el("span",{class:"cell d0", text:EMDASH, title:"No columns on this table are secured"});
+
+  var partial = !!S.permRows.colsPartial;
+  var b = el("button",{class:"cell " + (r.cs.reachable ? "d4" : "d0"), type:"button",
+    text:String(r.cs.reachable) + (partial ? "+" : ""),
+    title:(partial ? "at least " : "") + r.cs.reachable + " of " + r.cs.total +
+          " secured column(s) reachable - click to see them" +
+          (partial ? " (some profiles could not be read, so this is a minimum)" : ""),
+    "aria-label":"Column security on " + r.table.label + ": " + r.cs.reachable + " of " + r.cs.total + " secured columns reachable"});
+  b.addEventListener("click", function(){
+    // exact table, not a substring: "account" would otherwise also match "accountleads" etc.
+    S.colTableFilter = r.table.logical;
+    $("kSearch").value = "";
+    $("kShow").value = "all";
+    selectTab("tabCols");
+    renderCols();
+  });
+  return b;
+}
+function renderPerms(){
+  var body = $("permsBody"); clear(body);
+  if(!S.permRows || !S.permUser){ $("permsFoot").textContent = ""; return; }
+
+  var rows = filteredPerms();
+  var CAP = 600, shown = rows.slice(0, CAP);
+  shown.forEach(function(r){
+    // Only annotate the name when the table actually has secured columns - the brackets are a signal,
+    // and putting "(0 column level security)" on every row would drown it.
+    var nameCell = el("td",null,[ document.createTextNode(r.table.label) ]);
+    if(r.cs && r.cs.total > 0)
+      nameCell.appendChild(el("span",{class:"csnote",
+        text:" (" + r.cs.total + " column level security)",
+        title:r.cs.total + " column(s) on this table are secured"}));
+
+    var tr = el("tr",null,[ nameCell ]);
+    VERBS.forEach(function(v){
+      tr.appendChild(el("td",{class:"v"},[ cellButton(v, r.cells[v.key], r.table.label) ]));
+    });
+    tr.appendChild(el("td",{class:"v"},[ csCell(r) ]));
+    tr.appendChild(el("td",{class:"mono muted", text:r.table.logical}));
+    body.appendChild(tr);
+  });
+
+  $("permsFoot").textContent = rows.length > CAP
+    ? "Showing the first "+CAP+" of "+rows.length+" tables — search to narrow it down."
+    : rows.length + " table(s)";
+}
+/* Table access and Column security are two views of ONE chosen user. Both pickers always name that
+   user; the view you are looking at loads immediately and the other is marked stale so it cannot show
+   the previous user's results under a dropdown bearing the new one's name. */
+function setSubject(userId, load){
+  $("pUser").value = userId;
+  $("kUser").value = userId;
+
+  if(S.permUser && S.permUser._id !== userId){ S.permRows = null; S.permUser = null; renderPerms(); clear($("permHead")); }
+  if(S.colUser  && S.colUser._id  !== userId){ S.colRows  = null; S.colUser  = null; renderCols();  clear($("colHead")); }
+
+  if(load === "perms") return refreshPerms();
+  if(load === "cols")  return refreshCols();
+  return Promise.resolve();
+}
+/* Opening a tab loads it if it is not already showing the chosen user — so clicking straight onto
+   Column security works, rather than sitting empty until the dropdown is touched. */
+function loadTabIfStale(tabId){
+  var who = $("pUser").value || $("kUser").value;
+  if(!who) return;
+  if(tabId === "tabPerms" && (!S.permUser || S.permUser._id !== who)) refreshPerms();
+  if(tabId === "tabCols"  && (!S.colUser  || S.colUser._id  !== who)) refreshCols();
+}
+// Point both pickers at the user, then switch tabs — selectTab's staleness check does the loading,
+// so the panel loads exactly once rather than being kicked off twice and racing itself.
+function openPermsFor(userId){ setSubject(userId); selectTab("tabPerms"); }
+function openColsFor(userId){  setSubject(userId); selectTab("tabCols"); }
+var _permRun = 0;   // Table access
+var _colRun  = 0;   // Column security (separate: one view must not cancel the other)
+async function refreshPerms(){
+  var id = $("pUser").value;
+  var u  = S.usersById[id];
+  var run = ++_permRun;                 // only the newest request may paint
+  clear($("permHead"));
+  if(!u){ S.permRows=null; S.permUser=null; renderPerms(); return; }
+
+  var rows;
+  try{
+    rows = await computePermissions(u);
+  }catch(e){
+    if(run !== _permRun) return;
+    bootDone();
+    S.permUser = null; S.permRows = null;
+    banner("permHead","error","Could not work out this user's access.", e.message||String(e));
+    renderPerms();
+    return;
+  }
+  if(run !== _permRun) return;          // the operator moved on; discard this result
+  S.permUser = u;
+  S.permRows = rows;
+
+  var head = $("permHead");
+  var eff  = S.permRows.roles;
+  var direct = eff.filter(function(r){ return r.via==="direct"; }).length;
+  var viaTeam = eff.length - direct;
+
+  var dl = el("dl",{class:"kv"},[
+    el("dt",{text:"User"}),          el("dd",{text:u._name + (u.domainname? "  ("+u.domainname+")":"")}),
+    el("dt",{text:"Business unit"}), el("dd",{text:(S.busById[u._bu]||{}).name || "—"}),
+    el("dt",{text:"Roles"}),         el("dd",{text:direct+" assigned directly, "+viaTeam+" inherited from teams"}),
+    el("dt",{text:"Tables"}),        el("dd",{text:S.permRows.rows.filter(function(r){return r.any;}).length+" with some access, of "+S.permRows.rows.length+" securable"})
+  ]);
+  head.appendChild(dl);
+
+  var pills = el("div",{class:"pills", style:"margin-top:8px"});
+  eff.forEach(function(r){
+    var role = S.rolesById[r.roleId] || {name:r.roleId};
+    pills.appendChild(rolePill({name:role.name, via:r.via, team:r.viaName}));
+  });
+  if(!eff.length) pills.appendChild(el("span",{class:"badge danger", text:"No roles at all"}));
+  head.appendChild(pills);
+
+  if(isSysAdmin(u))
+    head.appendChild(el("div",{class:"bar warn"},[
+      el("b",{text:"This user is a System Administrator."}),
+      document.createTextNode("That role bypasses the security model entirely, so the grid below is a formality — they can do anything in the environment.")]));
+
+  if(S.permRows.colsPartial)
+    head.appendChild(el("div",{class:"bar warn"},[
+      el("b",{text:"The CS column is a minimum, not a total."}),
+      document.createTextNode(" These column security profiles could not be read: " +
+        S.permRows.colsPartial.join(", ") + ". Anything they grant is missing from the counts.")]));
+
+  if(S.permRows.colsError)
+    head.appendChild(el("div",{class:"bar warn"},[
+      el("b",{text:"Column security could not be read, so the CS column shows \u201c?\u201d."}),
+      document.createTextNode(" " + ((S.permRows.colsError && S.permRows.colsError.message) || S.permRows.colsError) +
+        " Reading it needs the Read privilege on Field Permission, which in practice means an administrator.")]));
+
+  if(S.permRows.failed.length)
+    head.appendChild(el("div",{class:"bar error"},[
+      el("b",{text:"Could not read "+S.permRows.failed.length+" role(s)."}),
+      document.createTextNode(S.permRows.failed.map(function(f){ return (f.role&&f.role.name)||"?"; }).join(", ")+
+        " — reading role privileges needs access to the Privilege table. The grid below is incomplete.")]));
+
+  var entra = u._teams.map(function(t){ return S.teamsById[t]; })
+                      .filter(function(t){ return t && (t.teamtype===2||t.teamtype===3); });
+  if(entra.length)
+    head.appendChild(el("div",{class:"bar"},[
+      el("b",{text:"Membership of "+entra.length+" Microsoft Entra group team(s) is derived at sign-in."}),
+      document.createTextNode("Dataverse only materialises those members when they access the environment, so this list can lag the real Entra group.")]));
+
+  renderPerms();
+}
+
+/* ================================ copy roles ================================ */
+/* A role record exists once per business unit. To give a target user "the same role" we must find
+   the copy that lives in THEIR business unit: match on roletemplateid first (constant in every
+   environment, but only the out-of-the-box roles have one), then parentrootroleid. */
+function resolveRoleForBu(role, buId){
+  if(!role) return null;
+  if(role._bu === buId) return role;
+  var byTmpl = null, byRoot = null;
+  for(var i=0;i<S.roles.length;i++){
+    var r = S.roles[i];
+    if(r._bu !== buId) continue;
+    if(role._tmpl && r._tmpl === role._tmpl){ byTmpl = r; break; }
+    if(!byRoot && r._root === role._root) byRoot = r;
+  }
+  return byTmpl || byRoot || null;
+}
+function sourceRoles(){
+  var u = S.usersById[$("cSource").value];
+  if(!u) return [];
+  // Direct assignments only: team-inherited roles belong to the team, not the user, and
+  // licence-driven roles (isautoassigned) are managed by the platform.
+  return u._roles.map(function(rid){ return S.rolesById[rid]; })
+                 .filter(function(r){ return !!r && !isAutoAssigned(r); });
+}
+function renderSourceRoles(){
+  var host = $("cRoles");
+  // preserve whatever the operator has already ticked/unticked across a re-render
+  var was = {}, hadAny = false, who = $("cSource").value;
+  if(host.dataset.srcUser === who){
+    Array.prototype.forEach.call(host.querySelectorAll("input[type=checkbox]"), function(cb){
+      was[cb.getAttribute("data-role")] = cb.checked; hadAny = true;
+    });
+  }
+  clear(host);
+  host.dataset.srcUser = who;
+  var u = S.usersById[who];
+  if(!u){ host.appendChild(el("p",{class:"hint", text:"Pick a source user."})); return; }
+
+  var roles = sourceRoles();
+  var auto = u._roles.map(function(rid){ return S.rolesById[rid]; })
+                     .filter(function(r){ return isAutoAssigned(r); });
+
+  if(!roles.length){
+    host.appendChild(el("div",{class:"bar warn"},[el("b",{text:"This user has no directly assigned roles to copy."}),
+      document.createTextNode("Roles they inherit from a team stay with the team — add the target users to that team instead.")]));
+    return;
+  }
+  host.appendChild(el("p",{class:"hint", text:"Tick the roles to copy. Team-inherited roles are not listed: they belong to the team, not the user. Unticking a role means “do not copy it” — it is never removed from anyone."}));
+  var box = el("div",{class:"pills", style:"gap:10px"});
+  roles.forEach(function(r){
+    var id = "cr_"+r.roleid, key = lower(r.roleid);
+    var cb = el("input",{type:"checkbox", id:id, "data-role":key});
+    cb.checked = hadAny && (key in was) ? was[key] : true;
+    cb.addEventListener("change", invalidatePlan);
+    box.appendChild(el("label",{class:"inline", for:id},[cb, document.createTextNode(" "+r.name)]));
+  });
+  host.appendChild(box);
+  if(auto.length)
+    host.appendChild(el("p",{class:"hint", style:"margin-top:8px",
+      text:"Not copied: "+auto.map(function(r){return r.name;}).join(", ")+" — assigned automatically by licensing."}));
+}
+function checkedSourceRoles(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll("#cRoles input[type=checkbox]"), function(cb){
+    if(cb.checked){ var r = S.rolesById[cb.getAttribute("data-role")]; if(r) out.push(r); }
+  });
+  return out;
+}
+function targetUsers(){
+  // the source is only excluded when we are copying FROM it; in Assign mode it is just another user
+  var src = $("cOp").value === "copy" ? $("cSource").value : null;
+  return Object.keys(S.selected).map(function(id){ return S.usersById[id]; })
+               .filter(function(u){ return !!u && (!src || u._id !== src); });
+}
+function renderCopyTargets(){
+  var host = $("cTargets"); clear(host);
+  var t = targetUsers();
+  if(!t.length){ host.appendChild(el("p",{class:"hint", text:"No users selected yet. Tick them on the Users tab."})); invalidatePlan(); return; }
+
+  var warn = t.filter(function(u){ return u.isdisabled===true || u._type==="app" || u._type==="system"; });
+  var tbl = el("table",null,[
+    el("thead",null,[el("tr",null,[el("th",{text:"User"}),el("th",{text:"Business unit"}),el("th",{text:"Type"}),el("th",{text:"Roles now"}),el("th",null,[])])]),
+    el("tbody",null, t.map(function(u){
+      return el("tr",null,[
+        el("td",null,[el("div",{text:u._name}), el("div",{class:"muted mono", text:u.domainname||""}),
+          u.isdisabled===true ? el("span",{class:"badge danger",text:"Disabled"}) : null]),
+        el("td",{text:(S.busById[u._bu]||{}).name||""}),
+        el("td",null,[typeBadge(u._type)]),
+        el("td",{class:"num", text:String(u._roles.length)}),
+        el("td",null,[el("button",{class:"subtle",type:"button",text:"Remove",onclick:function(){
+          delete S.selected[u._id]; renderUsers(); onSelectionChanged(); }})])
+      ]);
+    }))
+  ]);
+  host.appendChild(el("div",{class:"scroll", style:"max-height:32vh"},[tbl]));
+  if(warn.length)
+    host.appendChild(el("div",{class:"bar warn"},[el("b",{text:warn.length+" target(s) need care."}),
+      document.createTextNode("Dataverse refuses role changes on disabled users unless AllowRoleAssignmentOnDisabledUsers is on, will not give elevated roles to application users, and blocks the support user outright.")]));
+  invalidatePlan();
+}
+function syncOpUi(){
+  var copying = $("cOp").value === "copy";
+  show($("cSourceWrap"), copying);
+  show($("cModeWrap"), copying);
+  show($("cWhat"), copying);
+  show($("cRoles"), copying);
+  show($("cAssignCard"), !copying);
+
+  // Mirror leans on isautoassigned to leave licence-driven roles alone; without that column it is off.
+  if(!S.rolesHaveAutoAssigned) $("cMode").value = "add";
+
+  if(S.profileListError || !S.profiles.length){
+    $("wProfiles").checked = false;
+    $("wProfiles").disabled = true;
+    $("aProfile").disabled = true;
+  }
+}
+function invalidatePlan(){
+  S.plan = null;
+  $("btnApply").disabled = true;
+  clear($("copyPlan"));
+  $("copySummary").textContent = "";
+}
+/* ============================================================================
+   The plan. Four kinds of change, one pipeline:
+     role    add / remove   security roles, matched into the target's business unit
+     profile add / remove   column security profiles (organisation-owned, no BU matching)
+     team    add / remove   team membership, via AddMembersTeam / RemoveMembersTeam
+     bu      move           change of business unit - which WIPES the user's security roles,
+                            so the plan captures them first and re-applies the equivalents after
+   ============================================================================ */
+
+/* Re-read the direct roles AND business unit of the users about to be written to. The plan's
+   arithmetic is only as good as the data underneath it, and the page's copy can be hours old.
+   This MUST be able to throw: both callers treat a throw as "do not trust the plan". */
+async function refreshTargetRoles(users){
+  var res = await mapLimit(users, 6, async function(u){
+    var rs = await S.api.userRoles(u.systemuserid);
+    u._roles = rs.map(function(r){ return lower(r.roleid); });
+    var ts = await S.api.userTeams(u.systemuserid);
+    u._teams = ts.map(function(t){ return lower(t.teamid); });
+    // no try/catch: a failed re-read must reach the sentinel below, not leave stale data behind
+    var fresh = await S.api.get("systemusers(" + u.systemuserid + ")?$select=_businessunitid_value");
+    u._bu = lower(fresh && fresh._businessunitid_value);
+  });
+  // mapLimit turns rejections into sentinels and never throws, so inspect them or a failed re-read
+  // silently leaves stale data in place and the "nothing moved" guard passes on data it never checked.
+  var bad = [];
+  res.forEach(function(r, i){ if(r && r.__error) bad.push(users[i]._name + " (" + (r.__error.message || r.__error) + ")"); });
+  if(bad.length) throw new Error("Could not re-read: " + bad.join("; "));
+}
+
+function planWants(){
+  if($("cOp").value === "assign") return {roles:false, profiles:false, teams:false, bu:false, assign:true};
+  return {roles:$("wRoles").checked, profiles:$("wProfiles").checked,
+          teams:$("wTeams").checked, bu:$("wBu").checked, assign:false};
+}
+
+async function buildPlan(){
+  var op      = $("cOp").value;
+  var mode    = $("cMode").value;
+  var targets = targetUsers();
+  if(!targets.length) return null;
+
+  var plan = {mode:mode, op:op, items:[], adds:0, removes:0, moves:0, blocked:0,
+              selfTarget:false, builtFrom:{}};
+
+  if(op === "copy"){
+    var src = S.usersById[$("cSource").value];
+    var want = planWants();
+    if(!src || (!want.roles && !want.profiles && !want.teams && !want.bu)) return null;
+    plan.source = src;
+    plan.want = want;
+
+    // the source's own column security profiles, if we are copying them
+    var srcProfiles = [];
+    if(want.profiles){
+      try{ srcProfiles = await userSecurityProfiles(src); }
+      catch(e){ plan.profileError = e; }
+    }
+
+    for(var i=0;i<targets.length;i++) plan.items.push(await planCopyItem(plan, src, targets[i], srcProfiles));
+  } else {
+    plan.assign = {
+      role:    S.rolesById[$("aRole").value] || null,
+      profile: S.profilesById[$("aProfile").value] || null,
+      team:    S.teamsById[$("aTeam").value] || null,
+      bu:      $("aBu").value || null,
+      action:  $("aAction").value
+    };
+    if(!plan.assign.role && !plan.assign.profile && !plan.assign.team && !plan.assign.bu) return null;
+    if(plan.assign.profile){
+      // so "add" can skip someone who already has it and "remove" can skip someone who does not
+      await mapLimit(targets, 5, async function(t){
+        // direct assignments only: a team-derived profile is the team's, and cannot be removed here
+        try{ t._profiles = (await userSecurityProfiles(t))
+               .filter(function(x){ return x.via === "direct"; }).map(function(x){ return x.id; }); }
+        catch(e){ t._profiles = null; }
+      });
+    }
+    for(var j=0;j<targets.length;j++) plan.items.push(planAssignItem(plan, targets[j]));
+  }
+
+  plan.items.forEach(function(it){
+    plan.adds    += it.add.length + it.reapply.length;
+    plan.removes += it.remove.filter(function(x){ return !x.byMove; }).length;
+    plan.moves   += it.bu ? 1 : 0;
+    plan.blocked += it.unmatched.length;
+    if(it.danger && it.user._id === S.meId) plan.selfTarget = true;
+    plan.builtFrom[it.user._id] = it.user._roles.slice().sort().join(",") + "|" + it.user._bu;
+  });
+  return plan;
+}
+
+function newItem(u){
+  return {user:u, add:[], remove:[], skip:[], unmatched:[], notes:[], danger:false, bu:null, reapply:[]};
+}
+function noteCommon(it){
+  var u = it.user;
+  if(u._id === S.meId){ it.notes.push("This is YOUR OWN account. You are about to change your own access."); it.danger = true; }
+  if(u.isdisabled === true) it.notes.push("User is disabled — role assignment fails unless AllowRoleAssignmentOnDisabledUsers is on.");
+  if(u._type === "app")     it.notes.push("Application user — elevated roles will be refused.");
+  if(u._type === "system")  it.notes.push("System/support user — changes are usually blocked.");
+}
+
+async function planCopyItem(plan, src, u, srcProfiles){
+  var it = newItem(u);
+  var want = plan.want, mirror = plan.mode === "mirror";
+
+  /* ---- business unit first: it wipes security roles, so everything else is planned around it ---- */
+  var effBu = u._bu;
+  if(want.bu && src._bu && src._bu !== u._bu){
+    it.bu = {from:u._bu, to:src._bu};
+    effBu = src._bu;
+    it.danger = true;
+    it.notes.push("Moving business unit REMOVES every security role this user has. The roles they keep are re-applied afterwards, matched into " +
+                  ((S.busById[src._bu]||{}).name || "the new unit") + ".");
+  }
+
+  /* ---- security roles ----------------------------------------------------------------------
+     A business-unit move DESTROYS every role the user has, so when one is planned no role may be
+     written before it. Everything the user should end up with goes into `reapply`, which applyPlan
+     runs immediately after the move; only when there is no move do roles go into `add`. ---------- */
+  var wantRoles = {};                       // _root -> the role object to end up with
+  var have = {};
+  u._roles.forEach(function(rid){ var r = S.rolesById[rid]; if(r) have[r._root] = r; });
+
+  if(want.roles){
+    var srcRoles = checkedSourceRoles();    // honour the operator's tick boxes for what to COPY
+    // ...but Mirror's keep-set is the source's FULL role list. Unticking means "do not copy this",
+    // never "strip it from everyone who has it".
+    var keep = {};
+    sourceRoles().forEach(function(r){ keep[r._root] = r; });
+    srcRoles.forEach(function(r){ wantRoles[r._root] = r; });
+    if(!mirror) for(var k in have) wantRoles[k] = have[k];      // Add mode keeps what they already had
+    if(mirror && !it.bu){
+      u._roles.forEach(function(rid){
+        var r = S.rolesById[rid];
+        if(!r || keep[r._root] || isAutoAssigned(r)) return;
+        it.remove.push({kind:"role", thing:r});
+      });
+    }
+  } else {
+    for(var k2 in have) wantRoles[k2] = have[k2];               // not copying roles: keep their own
+  }
+
+  // A move destroys every existing role. Anything the user holds that is NOT in wantRoles therefore
+  // disappears as a consequence of the move - the preview has to say so rather than showing nothing.
+  if(it.bu){
+    u._roles.forEach(function(rid){
+      var r = S.rolesById[rid];
+      if(!r || isAutoAssigned(r) || wantRoles[r._root]) return;
+      it.remove.push({kind:"role", thing:r, byMove:true});
+    });
+  }
+
+  Object.keys(wantRoles).forEach(function(root){
+    var r = wantRoles[root];
+    if(isAutoAssigned(r)) return;                               // platform-managed
+    var eq = resolveRoleForBu(r, effBu);
+    if(!eq){ it.unmatched.push({kind:"role", thing:r}); return; }
+    if(it.bu){ it.reapply.push({kind:"role", thing:eq, from:r}); return; }
+    if(have[root]) it.skip.push({kind:"role", thing:eq});
+    else it.add.push({kind:"role", thing:eq, from:r});
+  });
+
+  /* ---- column security profiles: organisation-owned, so no BU matching ---- */
+  if(want.profiles && !plan.profileError){
+    var mine = [], profilesReadable = true;
+    try{ mine = await userSecurityProfiles(u); }
+    catch(e){
+      profilesReadable = false;
+      it.notes.push("Could not read this user's column security profiles, so none are copied — they would otherwise be added blind.");
+    }
+    if(!profilesReadable) srcProfiles = [];
+    var hasP = {}; mine.forEach(function(x){ hasP[x.id] = x; });
+    var keepP = {}; srcProfiles.forEach(function(x){ keepP[x.id] = x; });
+    srcProfiles.forEach(function(x){
+      if(x.via === "team") return;                       // belongs to the team, not the user
+      if(hasP[x.id]) it.skip.push({kind:"profile", thing:x});
+      else it.add.push({kind:"profile", thing:x});
+    });
+    if(mirror) mine.forEach(function(x){
+      if(x.via === "team" || keepP[x.id]) return;
+      it.remove.push({kind:"profile", thing:x});
+    });
+  }
+
+  /* ---- team membership ---- */
+  if(want.teams){
+    var hasT = {}; u._teams.forEach(function(t){ hasT[t] = 1; });
+    var keepT = {}; src._teams.forEach(function(t){ keepT[t] = 1; });
+    src._teams.forEach(function(tid){
+      var t = S.teamsById[tid]; if(!t) return;
+      var why = teamEditable(t);
+      if(why){ it.unmatched.push({kind:"team", thing:t, why:why}); return; }
+      if(hasT[tid]) it.skip.push({kind:"team", thing:t});
+      else it.add.push({kind:"team", thing:t});
+    });
+    if(mirror) u._teams.forEach(function(tid){
+      var t = S.teamsById[tid]; if(!t || keepT[tid]) return;
+      if(teamEditable(t)) return;                        // silently left alone: cannot be changed anyway
+      it.remove.push({kind:"team", thing:t});
+    });
+  }
+
+  noteCommon(it);
+  finishItem(it);
+  return it;
+}
+
+function planAssignItem(plan, u){
+  var it = newItem(u), a = plan.assign, adding = a.action === "add";
+
+  if(a.bu && lower(a.bu) !== u._bu){
+    it.bu = {from:u._bu, to:lower(a.bu)};
+    it.danger = true;
+    it.notes.push("Moving business unit REMOVES every security role this user has. They are re-applied afterwards, matched into " +
+                  ((S.busById[lower(a.bu)]||{}).name || "the new unit") + ".");
+    u._roles.forEach(function(rid){
+      var r = S.rolesById[rid];
+      if(!r || isAutoAssigned(r)) return;
+      var eq = resolveRoleForBu(r, lower(a.bu));
+      if(eq) it.reapply.push({kind:"role", thing:eq, from:r});
+      else   it.unmatched.push({kind:"role", thing:r});
+    });
+  }
+  var effBu = it.bu ? it.bu.to : u._bu;
+
+  if(a.role){
+    var eq = resolveRoleForBu(a.role, effBu);
+    if(!eq) it.unmatched.push({kind:"role", thing:a.role});
+    else {
+      var held = u._roles.some(function(rid){ var r = S.rolesById[rid]; return r && r._root === a.role._root; });
+      // With a move planned, a role they already hold is ALREADY in reapply - queueing it here too
+      // would assign it twice and the second call would fail as a duplicate.
+      var inReapply = it.reapply.some(function(x){ return x.thing._root === a.role._root; });
+      if(adding)      (held && (!it.bu || inReapply) ? it.skip : it.add).push({kind:"role", thing:eq});
+      else            (held ? it.remove : it.skip).push({kind:"role", thing:eq});
+    }
+  }
+  if(a.profile){
+    var pth = {id:lower(a.profile.fieldsecurityprofileid), name:a.profile.name};
+    var held = (it.user._profiles || null);          // set by planAssignPrep when it could be read
+    if(held === null) (adding ? it.add : it.remove).push({kind:"profile", thing:pth});
+    else if(adding)   (held.indexOf(pth.id) >= 0 ? it.skip : it.add).push({kind:"profile", thing:pth});
+    else              (held.indexOf(pth.id) >= 0 ? it.remove : it.skip).push({kind:"profile", thing:pth});
+  }
+  if(a.team){
+    var why = teamEditable(a.team);
+    var member = u._teams.indexOf(lower(a.team.teamid)) >= 0;
+    if(why) it.unmatched.push({kind:"team", thing:a.team, why:why});
+    else if(adding) (member ? it.skip : it.add).push({kind:"team", thing:a.team});
+    else            (member ? it.remove : it.skip).push({kind:"team", thing:a.team});
+  }
+
+  noteCommon(it);
+  finishItem(it);
+  return it;
+}
+
+/* Dataverse denies access to a user with no security role at all, so a plan is never allowed to
+   produce one - whatever combination of removals and business-unit moves got it there. */
+/* Cancelling a planned move means every role in the item was resolved against a business unit the user
+   is no longer going to be in. Re-resolve them against the one they are actually staying in, or drop
+   them - assigning a role from the wrong unit is exactly what Dataverse rejects. */
+function cancelMove(it, why){
+  it.notes.push(why);
+  it.bu = null;
+  var stay = it.user._bu;
+  var redo = it.reapply.concat(it.add.filter(function(x){ return x.kind === "role"; }));
+  it.reapply = [];
+  it.add = it.add.filter(function(x){ return x.kind !== "role"; });
+  it.remove = it.remove.filter(function(x){ return !x.byMove; });
+  it.unmatched = it.unmatched.filter(function(x){ return x.kind !== "role"; });
+  var held = {};
+  it.user._roles.forEach(function(rid){ var r = S.rolesById[rid]; if(r) held[r._root] = 1; });
+  redo.forEach(function(x){
+    var src = x.from || x.thing;
+    var eq = resolveRoleForBu(src, stay);
+    if(!eq) it.unmatched.push({kind:"role", thing:src});
+    else if(held[eq._root]) it.skip.push({kind:"role", thing:eq});
+    else it.add.push({kind:"role", thing:eq, from:src});
+  });
+}
+function finishItem(it){
+  if(it.bu){
+    var destBu = S.busById[it.bu.to];
+    if(destBu && destBu.isdisabled === true)
+      cancelMove(it, "“" + destBu.name + "” is a disabled business unit. The move is skipped — " +
+                     "it would strip the user's roles and leave them somewhere that grants nothing.");
+  }
+  var roleAdds    = it.add.filter(function(x){ return x.kind === "role"; }).length;
+  var roleRemoves = it.remove.filter(function(x){ return x.kind === "role" && !x.byMove; }).length;
+  var haveRoles   = it.user._roles.length;
+  // A move wipes everything, so the ONLY roles that survive it are the re-applied ones. Role adds are
+  // never queued alongside a move (see planCopyItem), so they must not be counted here either.
+  // A move wipes what they had, so only the re-applied roles and the post-move adds survive it.
+  var after = it.bu ? (it.reapply.length + roleAdds - roleRemoves)
+                    : (haveRoles + roleAdds - roleRemoves);
+  // Roles inherited from a team survive everything here - they belong to the team, not the user - so a
+  // user who ends with no DIRECT role is only locked out if they have no team roles either.
+  var teamRoles = effectiveRoles(it.user).filter(function(r){ return r.via === "team"; }).length;
+  if(after <= 0 && teamRoles > 0) after = teamRoles;
+  if(after <= 0){
+    if(it.bu){
+      cancelMove(it, "This move would leave the user with no security role in the new business unit, which locks them out. The move is skipped.");
+    } else {
+      it.notes.push("This would leave the user with no roles at all, which locks them out. The removals are skipped.");
+      it.remove = it.remove.filter(function(x){ return x.kind !== "role"; });
+    }
+  }
+  if(it.remove.some(function(x){ return x.kind === "role" && x.thing._tmpl === SYSADMIN_TEMPLATE; })){
+    it.notes.push("This removes System Administrator."); it.danger = true;
+  }
+}
+
+/* ---------------------------------- preview ---------------------------------- */
+function thingName(x){
+  if(x.kind === "role")    return x.thing.name;
+  if(x.kind === "profile") return x.thing.name;
+  if(x.kind === "team")    return x.thing.name;
+  return String(x.thing);
+}
+var KIND_LABEL = {role:"role", profile:"profile", team:"team"};
+function chip(x, cls){
+  return el("span",{class:"pill " + (cls || ""), title:KIND_LABEL[x.kind] || ""},[
+    el("span",{class:"pill-src " + (x.kind === "role" ? "" : "team"), text:(KIND_LABEL[x.kind]||"").toUpperCase()}),
+    document.createTextNode(thingName(x))
+  ]);
+}
+function renderPlan(){
+  var host = $("copyPlan"); clear(host);
+  var pl = S.plan;
+  if(!pl){ host.appendChild(el("p",{class:"hint", text:"Nothing to preview yet."})); return; }
+
+  var tbl = el("table",null,[
+    el("thead",null,[el("tr",null,[el("th",{text:"User"}),el("th",{text:"Add"}),
+      el("th",{text:"Remove"}),el("th",{text:"Business unit"}),el("th",{text:"Notes"})])]),
+    el("tbody",null, pl.items.map(function(it){
+      var addCell = el("div",{class:"pills"});
+      it.add.forEach(function(x){ addCell.appendChild(chip(x)); });
+      it.reapply.forEach(function(x){
+        addCell.appendChild(el("span",{class:"pill", title:"Re-applied after the business unit move"},[
+          el("span",{class:"pill-src", text:"RE-ADD"}), document.createTextNode(thingName(x))]));
+      });
+      if(!it.add.length && !it.reapply.length) addCell.appendChild(el("span",{class:"muted", text:EMDASH}));
+
+      var remCell = el("div",{class:"pills"});
+      it.remove.forEach(function(x){
+        var c = chip(x, "team");
+        if(x.byMove) c.title = "Lost as a consequence of the business unit move, not removed separately";
+        remCell.appendChild(c);
+      });
+      if(!it.remove.length) remCell.appendChild(el("span",{class:"muted", text:EMDASH}));
+
+      var buCell = it.bu
+        ? el("div",null,[ el("span",{class:"badge danger", text:
+            ((S.busById[it.bu.from]||{}).name || "?") + "  \u2192  " + ((S.busById[it.bu.to]||{}).name || "?")}) ])
+        : el("span",{class:"muted", text:EMDASH});
+
+      var probCell = el("div");
+      it.notes.forEach(function(n){
+        probCell.appendChild(el("div",{class:"badge "+(it.danger?"danger":"warn"), text:n,
+          style:"display:block;white-space:normal;margin-bottom:3px"}));
+      });
+      it.unmatched.forEach(function(x){
+        probCell.appendChild(el("div",{class:"badge warn", style:"display:block;white-space:normal;margin-bottom:3px",
+          text:"Skipped " + (KIND_LABEL[x.kind]||"item") + " \u201c" + thingName(x) + "\u201d: " +
+               (x.why || "no equivalent in this user's business unit.")}));
+      });
+      if(it.skip.length)
+        probCell.appendChild(el("div",{class:"badge", style:"display:block;white-space:normal;margin-bottom:3px",
+          text:"Already has: " + it.skip.map(function(x){ return thingName(x); }).join(", ")}));
+      if(!it.notes.length && !it.unmatched.length) probCell.appendChild(el("span",{class:"badge ok", text:"Ready"}));
+
+      return el("tr",null,[
+        el("td",null,[
+          el("div",{text:it.user._name, style:it.danger?"font-weight:700":null}),
+          el("div",{class:"muted mono", text:(S.busById[it.user._bu]||{}).name||""}),
+          it.user._id === S.meId ? el("span",{class:"badge danger", text:"You"}) : null]),
+        el("td",null,[addCell]), el("td",null,[remCell]), el("td",null,[buCell]), el("td",null,[probCell])
+      ]);
+    }))
+  ]);
+  host.appendChild(el("div",{class:"scroll", style:"max-height:40vh"},[tbl]));
+
+  if(pl.profileError)
+    host.appendChild(el("div",{class:"bar warn"},[
+      el("b",{text:"The source user's column security profiles could not be read."}),
+      document.createTextNode(" " + ((pl.profileError && pl.profileError.message) || pl.profileError) +
+        " No profiles are included in this plan.")]));
+
+  var bits = [];
+  if(pl.adds)    bits.push(pl.adds + " to add");
+  if(pl.removes) bits.push(pl.removes + " to remove");
+  if(pl.moves)   bits.push(pl.moves + " business unit move(s)");
+  if(pl.blocked) bits.push(pl.blocked + " skipped");
+  $("copySummary").textContent = bits.join(", ") || "nothing to do";
+  $("btnApply").disabled = (pl.adds + pl.removes + pl.moves) === 0;
+}
+
+function friendlyError(e){
+  if(e && e.status === 401)
+    return "Dataverse rejected the credentials (401). " + (S.conn.host === "xtb"
+      ? "The XrmToolBox access token has probably expired — switch the connection away and back to refresh it."
+      : "Your session may have expired; reload the page.");
+  if(e && e.status === 403)
+    return "Dataverse refused the request (403). This tool needs System Administrator: reading and changing " +
+           "roles, profiles, teams and business units all require privileges only that role reliably has.";
+  var code = e && e.code ? String(e.code).toLowerCase() : null;
+  if(code){ for(var k in ERRORS){ if(k.toLowerCase() === code) return ERRORS[k] + (e.detail ? " — " + e.detail : ""); } }
+  var d = (e && (e.detail || e.message)) || String(e);
+  for(var kk in ERRORS){ if(d.toLowerCase().indexOf(kk.toLowerCase()) >= 0) return ERRORS[kk] + " — " + d; }
+  return d;
+}
+
+/* ---------------------------------- apply ---------------------------------- */
+async function applyPlan(){
+  var pl = S.plan; if(!pl) return;
+  var logEl = $("copyLog");
+  show($("copyLogWrap"), true); show($("copyProg"), true);
+  logEl.textContent = "";
+  function log(t){ logEl.textContent += t + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+
+  $("btnApply").disabled = true; $("btnPreview").disabled = true;
+
+  log("Re-checking " + pl.items.length + " target(s) before writing anything...");
+  try{
+    await refreshTargetRoles(pl.items.map(function(it){ return it.user; }));
+  }catch(e){
+    log("! " + (e.message || e) + "\nNothing was written.");
+    $("btnPreview").disabled = false;
+    banner("copyPlan","error","Nothing was written.","The targets could not be re-read, so the preview could not be trusted.");
+    return;
+  }
+  var moved = pl.items.filter(function(it){
+    return pl.builtFrom[it.user._id] !== it.user._roles.slice().sort().join(",") + "|" + it.user._bu;
+  });
+  if(moved.length){
+    log("! " + moved.map(function(it){ return it.user._name; }).join(", ") +
+        " changed since you pressed Preview.\nNothing was written.");
+    $("btnPreview").disabled = false;
+    S.plan = null; renderUsers();
+    banner("copyPlan","warn","Nothing was written — the environment changed.",
+      "Someone else altered these users since you previewed. Press Preview again to rebuild the plan.");
+    return;
+  }
+
+  // Order matters. Adds before removes so nobody is briefly role-less; the business-unit move sits
+  // between them because it wipes roles, and its re-applications must land immediately afterwards.
+  var work = [];
+  // users who are NOT moving: adds first, so nobody is briefly role-less
+  pl.items.forEach(function(it){
+    if(it.bu) return;
+    it.add.forEach(function(x){ work.push({op:"add", it:it, x:x}); });
+  });
+  // users who ARE moving: the move first (it re-applies their roles inline), then anything else they gain
+  pl.items.forEach(function(it){
+    if(!it.bu) return;
+    work.push({op:"bu", it:it});
+    // every add, roles included: after the move they resolve against the destination business unit,
+    // and dropping them here is how assign-mode role assignments went missing
+    it.add.forEach(function(x){ work.push({op:"add", it:it, x:x}); });
+  });
+  // removals last, in every case
+  // byMove entries are shown in the preview but never executed: the move itself removes them.
+  pl.items.forEach(function(it){
+    it.remove.forEach(function(x){ if(!x.byMove) work.push({op:"remove", it:it, x:x}); });
+  });
+
+  var ok = 0, fail = 0, skipped = 0, done = 0, failedFor = {};
+  function bump(){ done++; $("copyBar").style.width = Math.round(done / work.length * 100) + "%"; }
+
+  for(var i = 0; i < work.length; i++){
+    var w = work[i], u = w.it.user, uid = u._id;
+
+    if(w.op === "bu" && failedFor[uid]){
+      skipped++; bump();
+      log("  ~ " + u._name + "  business unit move skipped: an earlier change for this user failed, " +
+          "and a move on top of that could strip their access");
+      continue;
+    }
+    if(w.op === "remove"){
+      if(failedFor[uid]){
+        skipped++; bump();
+        log("  ~ " + u._name + "  " + thingName(w.x) + "\n      skipped: an earlier change for this user failed");
+        continue;
+      }
+      if(w.x.kind === "role" && u._roles.length <= 1){
+        skipped++; bump();
+        log("  ~ " + u._name + "  " + w.x.thing.name + "\n      skipped: it is their last role and Dataverse locks out users with none");
+        continue;
+      }
+    }
+
+    try{
+      if(w.op === "bu"){
+        await S.api.setBusinessUnit(u.systemuserid, w.it.bu.to, true);
+        // only past this line did the move actually happen
+        u._bu = w.it.bu.to;
+        u._roles = [];                                   // the move wiped them
+        // the platform also swaps them between the two units' default teams
+        u._teams = u._teams.filter(function(tid){
+          var t = S.teamsById[tid];
+          return !(t && t.isdefault === true);
+        });
+        S.teams.forEach(function(t){
+          if(t.isdefault === true && lower(t._businessunitid_value) === w.it.bu.to) u._teams.push(lower(t.teamid));
+        });
+        log("  \u2192 " + u._name + "  moved to " + ((S.busById[w.it.bu.to]||{}).name || w.it.bu.to));
+        ok++;
+        // put back every role the plan said they keep, in the new business unit
+        for(var k = 0; k < w.it.reapply.length; k++){
+          var ra = w.it.reapply[k];
+          try{
+            await S.api.assocRole(u.systemuserid, ra.thing.roleid);
+            u._roles.push(lower(ra.thing.roleid));
+            log("    + " + ra.thing.name + "  (re-applied after the move)");
+            ok++;
+          }catch(e2){
+            fail++; failedFor[uid] = 1;
+            log("    ! " + ra.thing.name + " could not be re-applied\n        " + friendlyError(e2));
+          }
+        }
+        if(!u._roles.length && !effectiveRoles(u).some(function(r){ return r.via === "team"; }))
+          log("    !! " + u._name + " now has NO security role and cannot sign in. Assign one immediately.");
+      }
+      else if(w.x.kind === "role"){
+        if(w.op === "add"){ await S.api.assocRole(u.systemuserid, w.x.thing.roleid);
+                            if(u._roles.indexOf(lower(w.x.thing.roleid)) < 0) u._roles.push(lower(w.x.thing.roleid)); }
+        else              { await S.api.unassocRole(u.systemuserid, w.x.thing.roleid);
+                            var ix = u._roles.indexOf(lower(w.x.thing.roleid)); if(ix >= 0) u._roles.splice(ix,1); }
+        log((w.op === "add" ? "  + " : "  - ") + u._name + "  role: " + w.x.thing.name);
+        ok++;
+      }
+      else if(w.x.kind === "profile"){
+        if(w.op === "add") await S.api.assocProfile(w.x.thing.id, u.systemuserid);
+        else               await S.api.unassocProfile(w.x.thing.id, u.systemuserid);
+        delete S.colCache[uid];                          // its column access just changed
+        log((w.op === "add" ? "  + " : "  - ") + u._name + "  profile: " + w.x.thing.name);
+        ok++;
+      }
+      else if(w.x.kind === "team"){
+        await S.api.teamMembers(w.x.thing.teamid, [u.systemuserid], w.op === "add");
+        var tid = lower(w.x.thing.teamid), ti = u._teams.indexOf(tid);
+        if(w.op === "add"){ if(ti < 0) u._teams.push(tid); } else if(ti >= 0) u._teams.splice(ti,1);
+        delete S.colCache[uid];
+        log((w.op === "add" ? "  + " : "  - ") + u._name + "  team: " + w.x.thing.name);
+        ok++;
+      }
+    }catch(e){
+      fail++; failedFor[uid] = 1;
+      log("  ! " + u._name + "  " + (w.op === "bu" ? "business unit move" : thingName(w.x)) +
+          "\n      " + friendlyError(e));
+    }
+    bump();
+  }
+
+  var emptied = pl.items.filter(function(it){
+    return it.user._roles.length === 0 &&
+           !effectiveRoles(it.user).some(function(r){ return r.via === "team"; });
+  });
+  log("\nDone. " + ok + " succeeded, " + fail + " failed" + (skipped ? ", " + skipped + " skipped for safety" : "") + ".");
+  if(emptied.length)
+    log("!! " + emptied.map(function(it){ return it.user._name; }).join(", ") +
+        " now hold no security role and cannot sign in. Assign one immediately.");
+
+  $("btnPreview").disabled = false;
+  S.plan = null;
+  S.colCache = {};
+  S.permRows = null; S.permUser = null; S.colRows = null; S.colUser = null;
+  clear($("permHead")); clear($("colHead"));
+  renderPerms(); renderCols();
+  renderUsers();
+  renderCopyTargets();
+  renderSourceRoles();
+  // the banner goes LAST: renderCopyTargets -> invalidatePlan clears #copyPlan, which would otherwise
+  // wipe the result - including the "these users now have no roles" warning - before it could be read
+  banner("copyPlan", emptied.length ? "error" : fail ? "warn" : "ok",
+    ok + " change(s) applied" + (fail ? ", " + fail + " failed" : "") + (skipped ? ", " + skipped + " skipped" : "") + ".",
+    emptied.length ? " WARNING: " + emptied.length + " user(s) now have no roles at all — see the log."
+                   : fail ? " See the log for the reason against each one."
+                          : " The Users tab has been updated.");
+}
+
+/* ================================ CSV export ================================ */
+function csvCell(v){
+  var s = v==null ? "" : String(v);
+  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function download(name, rows){
+  // BOM so Excel opens UTF-8 correctly on a UK/European machine
+  var csv = "﻿" + rows.map(function(r){ return r.map(csvCell).join(","); }).join("\r\n");
+  var blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  var a = el("a",{href:URL.createObjectURL(blob), download:name});
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+}
+function exportUsers(){
+  var rows = [["Name","Username","Email","Business unit","Type","Access mode","Disabled","Licensed",
+               "Direct role count","Inherited role count","Teams",
+               "Roles assigned directly","Roles inherited from teams"]];
+  filteredUsers().forEach(function(u){
+    var names = roleNames(u);
+    rows.push([u._name, u.domainname, u.internalemailaddress, (S.busById[u._bu]||{}).name,
+      u._type, ACCESS_MODE[u.accessmode]||u.accessmode, u.isdisabled===true?"Yes":"No", u.islicensed===true?"Yes":"No",
+      names.filter(function(n){ return n.via==="direct"; }).length,
+      names.filter(function(n){ return n.via==="team"; }).length,
+      u._teams.map(function(t){return (S.teamsById[t]||{}).name;}).join("; "),
+      names.filter(function(n){ return n.via === "direct"; }).map(function(n){ return n.name; }).join("; "),
+      names.filter(function(n){ return n.via === "team"; })
+           .map(function(n){ return n.name + " (via " + n.team + ")"; }).join("; ")]);
+  });
+  download("security-roles-users.csv", rows);
+}
+function exportPerms(){
+  if(!S.permRows){ return; }
+  var u = S.permUser;
+  var head = ["Table","Logical name"].concat(VERBS.map(function(v){ return v.label; }))
+               .concat(["Secured columns","Secured columns reachable"]);
+  var rows = [["User", u._name],["Username", u.domainname||""],["Business unit",(S.busById[u._bu]||{}).name||""],
+              ["Roles", S.permRows.roles.map(function(r){
+                 var role=S.rolesById[r.roleId]||{name:r.roleId};
+                 return role.name + (r.via==="team" ? " (via "+r.viaName+")" : ""); }).join("; ")],
+              [],head];
+  // export exactly what the grid is showing, so the CSV and the screen never disagree
+  filteredPerms().forEach(function(r){
+    rows.push([r.table.label, r.table.logical].concat(VERBS.map(function(v){
+      var c = r.cells[v.key];
+      return c ? (DEPTH[c.depth]||{label:c.depth}).label : "";
+    })).concat([
+      S.permRows.haveCols ? ((r.cs && r.cs.total) || 0) : "unknown",
+      S.permRows.haveCols ? ((r.cs && r.cs.reachable) || 0) : "unknown"
+    ]));
+  });
+  download("table-access-"+(u.domainname||u._name).replace(/[^\w.@-]+/g,"_")+".csv", rows);
+}
+
+/* ================================ modal ================================ */
+var _modalPrev = null;
+function modal(title, kids, actions){
+  closeModal();
+  _modalPrev = document.activeElement;
+  var body = el("div",{class:"body"}, kids);
+  var acts = el("div",{class:"acts"}, (actions||[el("button",{class:"primary",type:"button",text:"Close",onclick:closeModal})]));
+  var box  = el("div",{class:"modal", role:"dialog", "aria-modal":"true", "aria-label":title},
+                [el("h3",{text:title}), body, acts]);
+  var back = el("div",{class:"backdrop", id:"modalBack"},[box]);
+  back.addEventListener("click", function(e){ if(e.target===back) closeModal(); });
+  // keep Tab inside the dialog while it is open (WCAG 2.1 no-keyboard-trap / focus order)
+  back.addEventListener("keydown", function(e){
+    if(e.key !== "Tab") return;
+    var f = Array.prototype.filter.call(
+      box.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'),
+      function(n){ return !n.disabled && n.offsetParent !== null; });
+    if(!f.length) return;
+    var first = f[0], last = f[f.length-1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
+  document.body.appendChild(back);
+  var f0 = box.querySelector("button"); if(f0) f0.focus();
+}
+function closeModal(){
+  var b = $("modalBack");
+  if(b) b.remove();
+  if(_modalPrev && _modalPrev.focus){ _modalPrev.focus(); _modalPrev = null; }
+}
+document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeModal(); });
+
+/* ================================ tabs ================================ */
+var TABS = [["tabUsers","panUsers"],["tabPerms","panPerms"],["tabCols","panCols"],["tabCopy","panCopy"]];
+function selectTab(id){
+  TABS.forEach(function(t){
+    var on = t[0]===id;
+    var tab = $(t[0]);
+    tab.setAttribute("aria-selected", on ? "true" : "false");
+    tab.tabIndex = on ? 0 : -1;
+    show($(t[1]), on);
+  });
+  $(id).focus();
+  loadTabIfStale(id);
+}
+TABS.forEach(function(t, i){
+  $(t[0]).addEventListener("click", function(){ selectTab(t[0]); });
+  $(t[0]).addEventListener("keydown", function(e){
+    var d = e.key==="ArrowRight" ? 1 : e.key==="ArrowLeft" ? -1 : 0;
+    if(!d) return;
+    e.preventDefault();
+    selectTab(TABS[(i + d + TABS.length) % TABS.length][0]);
+  });
+});
+
+/* ================================ wiring ================================ */
+function fillSelect(sel, items, valueFn, labelFn, keepFirst){
+  var cur = sel.value;
+  while(sel.children.length > (keepFirst?1:0)) sel.removeChild(sel.lastChild);
+  items.forEach(function(it){ sel.appendChild(el("option",{value:valueFn(it), text:labelFn(it)})); });
+  if(cur) sel.value = cur;
+}
+function applyCapabilityLimits(){
+  if(S.rolesHaveAutoAssigned) return;
+  var mode = $("cMode");
+  var mirror = mode.querySelector('option[value="mirror"]');
+  if(mirror){ mirror.disabled = true; mirror.textContent += "  (unavailable in this environment)"; }
+  mode.value = "add";
+}
+function buildFilters(){
+  fillSelect($("fBu"), S.bus, function(b){ return lower(b.businessunitid); }, function(b){ return b.name; }, true);
+
+  // roles are replicated per business unit, so present one row per logical role
+  var seen = {}, uniq = [];
+  S.roles.forEach(function(r){ if(seen[r._root]) return; seen[r._root]=1; uniq.push(r); });
+  uniq.sort(function(a,b){ return a.name.localeCompare(b.name); });
+  fillSelect($("fRole"), uniq, function(r){ return r._root; }, function(r){ return r.name; }, true);
+
+  fillSelect($("fTeam"), S.teams, function(t){ return lower(t.teamid); },
+    function(t){ return t.name + " ("+(TEAM_TYPE[t.teamtype]||t.teamtype)+")"; }, true);
+
+  // every user, not just the enabled ones: the row actions can point these at anybody, and a value
+  // that matches no <option> silently selects nothing and blanks the panel.
+  var people = S.users.slice().sort(function(a,b){ return norm(a._name).localeCompare(norm(b._name)); });
+  var opt = function(u){
+    return u._name + (u.domainname ? "  — " + u.domainname : "") + (u.isdisabled === true ? "  (disabled)" : "");
+  };
+  fillSelect($("pUser"), people, function(u){ return u._id; }, opt, false);
+  fillSelect($("kUser"), people, function(u){ return u._id; }, opt, false);
+  fillSelect($("cSource"), people, function(u){ return u._id; }, opt, false);
+
+  // Assign pickers. Roles are de-duplicated to one row per logical role - the per-business-unit copy
+  // is resolved against each target when the plan is built.
+  var seenR = {}, uniqR = [];
+  S.roles.forEach(function(r){ if(seenR[r._root]) return; seenR[r._root] = 1; uniqR.push(r); });
+  uniqR.sort(function(a,b){ return a.name.localeCompare(b.name); });
+  fillSelect($("aRole"), uniqR, function(r){ return lower(r.roleid); }, function(r){ return r.name; }, true);
+
+  // the System Administrator profile is the platform's own record of every secured column; handing it
+  // to a user is not a meaningful grant and Learn does not describe it as assignable
+  var assignable = S.profiles.filter(function(x){ return lower(x.fieldsecurityprofileid) !== SYSADMIN_FS_PROFILE; });
+  fillSelect($("aProfile"), assignable, function(x){ return lower(x.fieldsecurityprofileid); },
+             function(x){ return x.name; }, true);
+
+  // only teams whose membership can actually be changed
+  var editable = S.teams.filter(function(t){ return !teamEditable(t); });
+  fillSelect($("aTeam"), editable, function(t){ return lower(t.teamid); },
+             function(t){ return t.name + "  (" + (TEAM_TYPE[t.teamtype] || t.teamtype) + ")"; }, true);
+
+  fillSelect($("aBu"), S.bus, function(b){ return lower(b.businessunitid); },
+             function(b){ return b.name + (b.isdisabled === true ? "  (disabled)" : ""); }, true);
+}
+function wire(){
+  ["fSearch","fType","fBu","fRole","fTeam"].forEach(function(id){
+    $(id).addEventListener("input", renderUsers);
+    $(id).addEventListener("change", renderUsers);
+  });
+  $("fDisabled").addEventListener("change", renderUsers);
+  $("fNoRoles").addEventListener("change", renderUsers);
+
+  // Sortable headers must be reachable and operable from the keyboard, not just the mouse.
+  function wireSort(tableSel, attr, state, render){
+    Array.prototype.forEach.call(document.querySelectorAll(tableSel+" th.sortable"), function(th){
+      th.tabIndex = 0;
+      th.setAttribute("role","columnheader");
+      th.setAttribute("aria-describedby", "sortHint");
+      function activate(){
+        var k = th.getAttribute(attr);
+        state.dir = (state.key===k) ? -state.dir : 1;
+        state.key = k;
+        Array.prototype.forEach.call(document.querySelectorAll(tableSel+" th.sortable"), function(o){ o.removeAttribute("aria-sort"); });
+        th.setAttribute("aria-sort", state.dir>0 ? "ascending" : "descending");
+        render();
+      }
+      th.addEventListener("click", activate);
+      th.addEventListener("keydown", function(e){
+        if(e.key==="Enter" || e.key===" " || e.key==="Spacebar"){ e.preventDefault(); activate(); }
+      });
+    });
+  }
+  wireSort("#tblUsers", "data-sort",  S.sort,  renderUsers);
+  wireSort("#tblPerms", "data-psort", S.psort, renderPerms);
+  wireSort("#tblCols",  "data-ksort", S.ksort, renderCols);
+
+  $("btnSelAll").addEventListener("click", function(){
+    filteredUsers().forEach(function(u){ S.selected[u._id]=true; });
+    renderUsers(); onSelectionChanged();
+  });
+  $("btnSelNone").addEventListener("click", function(){
+    S.selected = {}; renderUsers(); onSelectionChanged();
+  });
+  $("btnExportUsers").addEventListener("click", exportUsers);
+  $("btnExportPerms").addEventListener("click", exportPerms);
+
+  $("pUser").addEventListener("change", function(){ setSubject($("pUser").value, "perms"); });
+  $("pSearch").addEventListener("input", renderPerms);
+  $("pShow").addEventListener("change", renderPerms);
+
+  $("kUser").addEventListener("change", function(){ setSubject($("kUser").value, "cols"); });
+  $("kSearch").addEventListener("input", function(){ S.colTableFilter = null; renderCols(); });
+  $("kShow").addEventListener("change", renderCols);
+  $("btnExportCols").addEventListener("click", exportCols);
+
+  $("cSource").addEventListener("change", function(){ renderSourceRoles(); renderCopyTargets(); });
+  $("cMode").addEventListener("change", invalidatePlan);
+  $("cOp").addEventListener("change", function(){ syncOpUi(); invalidatePlan(); });
+  ["wRoles","wProfiles","wTeams","wBu","aRole","aProfile","aTeam","aBu","aAction"].forEach(function(id){
+    $(id).addEventListener("change", invalidatePlan);
+  });
+
+  $("btnPreview").addEventListener("click", async function(){
+    var targets = targetUsers();
+    if(!targets.length){
+      banner("copyPlan","warn","No targets.","Tick the users you want to change on the Users tab, then come back here.");
+      return;
+    }
+    var src = S.usersById[$("cSource").value];
+    $("btnPreview").disabled = true;
+    clearBanner("copyPlan");
+    try{
+      // plan against what is true now, not against what the page loaded with
+      await refreshTargetRoles(src ? targets.concat([src]) : targets);
+      renderSourceRoles();
+      S.plan = await buildPlan();
+    }catch(e){
+      banner("copyPlan","error","Could not build the plan.", (e && e.message) || String(e));
+      $("btnPreview").disabled = false;
+      return;
+    }
+    $("btnPreview").disabled = false;
+    if(!S.plan){
+      banner("copyPlan","warn","Nothing to preview.", $("cOp").value === "copy"
+        ? "Pick a source user and tick at least one thing to include."
+        : "Pick at least one role, profile, team or business unit to assign.");
+      return;
+    }
+    renderPlan();
+  });
+  $("btnApply").addEventListener("click", function(){
+    var p = S.plan; if(!p) return;
+    var where = S.conn.baseUrl || S.conn.mode || "this environment";
+    var sysadmin = p.items.filter(function(it){
+      return it.remove.some(function(x){ return x.kind === "role" && x.thing._tmpl === SYSADMIN_TEMPLATE; }); });
+
+    var ack = el("input",{type:"checkbox", id:"ackSelf"});
+    var body = [
+      el("p",null,[document.createTextNode("This writes to "+p.items.length+" user record(s) in "),
+                   el("strong",{text:where}), document.createTextNode(".")]),
+      el("ul",null,[
+        el("li",{text:p.adds+" assignment(s) will be added."}),
+        p.removes ? el("li",{text:p.removes+" assignment(s) will be removed."}) : null,
+        p.moves ? el("li",{text:p.moves+" user(s) will be MOVED to a different business unit, which removes every security role they have — the ones they keep are re-applied immediately afterwards."}) : null,
+        el("li",{text:"Additions run first, and a user's removals are abandoned if any of their additions fail."}),
+        el("li",{text:"Each target's current roles are re-read first; if anything changed since you previewed, nothing is written."})
+      ]),
+      sysadmin.length ? el("div",{class:"bar error"},[el("b",{text:"System Administrator will be removed from "+sysadmin.length+" user(s)."}),
+        document.createTextNode(sysadmin.map(function(it){ return it.user._name; }).join(", "))]) : null,
+      p.selfTarget ? el("div",{class:"bar error"},[el("b",{text:"One of the targets is your own account."}),
+        document.createTextNode("If this removes a role you depend on, you may not be able to undo it yourself.")]) : null,
+      p.selfTarget ? el("label",{class:"inline"},[ack, document.createTextNode(" I understand I am changing my own access")]) : null,
+      el("p",{class:"hint", text:"There is no undo. Mirror mode in particular will strip roles a target may need."})
+    ];
+    var go = el("button",{class:"primary", type:"button", text:"Apply now",
+      onclick:function(){ closeModal(); applyPlan(); }});
+    if(p.selfTarget){
+      go.disabled = true;
+      ack.addEventListener("change", function(){ go.disabled = !ack.checked; });
+    }
+    modal("Apply role changes?", body, [el("button",{type:"button", text:"Cancel", onclick:closeModal}), go]);
+  });
+
+  $("btnReload").addEventListener("click", function(){ location.reload(); });
+  $("btnConnect").addEventListener("click", function(){
+    var url = $("inUrl").value.trim(), tok = $("inToken").value.trim();
+    if(!url || !tok){ banner("globalMsg","warn","Enter both an organisation URL and a token.",""); return; }
+    S.conn = {host:"web", mode:"Standalone (token)", baseUrl:url.replace(/\/+$/,""), token:tok, ready:true};
+    show($("manualCard"), false);
+    start();
+  });
+}
+
+/* ================================ init ================================ */
+function paintConn(){
+  // Every host shows the connection somewhere of its own, so keep this to the shortest useful form.
+  var host = "";
+  try{ if(S.conn.baseUrl) host = new URL(S.conn.baseUrl).hostname; }catch(e){ host = S.conn.baseUrl || ""; }
+  var sameOrigin = host && typeof location !== "undefined" && host === location.hostname;
+  $("connMode").textContent = sameOrigin ? "" : S.conn.mode;
+  $("connOrg").textContent  = sameOrigin ? "" : host;
+  $("connUser").textContent = S.conn.user ? "as "+S.conn.user : "";
+}
+async function start(){
+  paintConn();
+  S.api = makeApi(S.conn);
+  try{
+    await loadOrg();
+  }catch(e){
+    bootDone();
+    banner("globalMsg","error","Could not load the environment.",
+      (e.message||String(e)) + "  Reading users, roles and privileges needs read access to the System User, " +
+      "Security Role, Team and Privilege tables — a System Administrator or System Customizer normally has it.");
+    return;
+  }
+  buildFilters();
+  applyCapabilityLimits();
+  syncOpUi();
+  renderUsers();
+  renderSourceRoles();
+  onSelectionChanged();
+  show($("app"), true);
+
+  // A partial load must never be mistaken for "these users have no roles".
+  if(S.loadWarnings && S.loadWarnings.length){
+    banner("globalMsg","warn","Some of this environment could not be read — the grids below are incomplete.",
+      " " + S.loadWarnings.join("  "));
+  } else if(!S.rolesHaveAutoAssigned){
+    banner("globalMsg","warn","This environment did not return the isautoassigned column on security roles.",
+      " Licence-driven roles cannot be told apart from ordinary ones, so Mirror mode is disabled to stop the tool fighting the platform over them.");
+  } else if(S.bus.length > 1){
+    banner("globalMsg","", "This environment has "+S.bus.length+" business units.",
+      " A security role is replicated into every one of them, so copying roles across business units matches the equivalent role in the target's own unit.");
+  }
+}
+async function init(){
+  $("ver").textContent = APP_VERSION;
+  S.conn = makeConn();
+  document.body.dataset.host = S.conn.host;
+
+  // In Power Platform ToolBox the org URL comes from the active connection, not the page.
+  if(PPTB){
+    try{
+      var c = await window.toolboxAPI.connections.getActiveConnection();
+      if(c){
+        S.conn.baseUrl = pickOrgUrl(c);
+        var nm = c.name || c.environmentName || c.friendlyName || c.environment;
+        if(nm) S.conn.mode = "Power Platform ToolBox: " + String(nm).replace(/^https:\/\//,"");
+      }
+    }catch(e){ if(window.console) console.warn("Could not read the active ToolBox connection:", e); }
+  }
+  wire();
+  if(!S.conn.ready){
+    bootDone();
+    paintConn();
+    if(S.conn.hint) banner("globalMsg","warn","No access token for this connection.", " "+S.conn.hint);
+    if(S.conn.baseUrl) $("inUrl").value = S.conn.baseUrl;
+    show($("manualCard"), true);
+    return;
+  }
+  await start();
+}
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+
+})();
+</script>
+</body>
+</html>

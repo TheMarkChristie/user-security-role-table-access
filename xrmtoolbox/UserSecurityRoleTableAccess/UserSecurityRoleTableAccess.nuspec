@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>MarkChristie.UserSecurityRoleTableAccess</id>
+    <version>1.0.0</version>
+    <title>User Security Role Table Access</title>
+    <authors>Mark Christie</authors>
+    <owners>Mark Christie</owners>
+    <projectUrl>https://github.com/TheMarkChristie/user-security-role-table-access</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/TheMarkChristie/user-security-role-table-access/main/icon.png</iconUrl>
+    <icon>icon.png</icon>
+    <readme>README.md</readme>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <description>See exactly what everyone in your Dataverse environment can do, and change it in bulk. Lists every user with the security roles they have, showing which ones were given to them directly and which they picked up from a team. For any user it works out what that actually means in practice: which tables they can create, read, edit, delete, assign and share records in, at what level, and which protected columns they can see. Then it copies that setup onto other people - security roles, column security profiles, team membership and business unit - showing you exactly what will change before anything is saved. You need the System Administrator role to use it.</description>
+    <summary>See exactly what everyone in your Dataverse environment can do, and change it in bulk. Needs the System Administrator role.</summary>
+    <releaseNotes>Initial release. Users with direct and team-inherited security roles; effective per-table CRUD depth; per-user column security; and copy/assign of roles, column security profiles, team membership and business unit with a preview and a per-item log. WebView2-hosted Windows 95 UI; shared logic with the D365 web resource and the Power Platform ToolBox tool. Needs the System Administrator role.</releaseNotes>
+    <copyright>Copyright 2026 Mark Christie</copyright>
+    <tags>XrmToolBox Plugin Dataverse Dynamics365 PowerPlatform Security SecurityRoles Privileges Permissions Users Audit Governance</tags>
+    <dependencies>
+      <dependency id="XrmToolBox" version="1.2025.7.71" />
+    </dependencies>
+  </metadata>
+  <files>
+    <!-- Ship ONLY our own assembly + HTML; XrmToolBox provides WebView2 + the Dataverse SDK.
+         The Tool Library extracts a "Plugins" folder into the user's XrmToolBox Plugins dir. -->
+    <file src="..\..\icon.png" target="" />
+    <file src="..\..\README.md" target="" />
+    <file src="bin\Release\net48\UserSecurityRoleTableAccess.dll" target="Plugins" />
+    <file src="bin\Release\net48\app\index.html" target="Plugins\app" />
+  </files>
+</package>
