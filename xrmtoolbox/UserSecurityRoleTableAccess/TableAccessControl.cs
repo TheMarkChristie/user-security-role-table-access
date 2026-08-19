@@ -35,6 +35,13 @@ namespace UserSecurityRoleTableAccess
         private string _configScriptId;
         private ConnectionDetail _detail;
 
+        /// <summary>
+        /// UpdateConnection fires and forgets, so two connection changes can interleave between removing
+        /// the old config script and adding the new one - leaving a stale org URL and token registered.
+        /// One at a time.
+        /// </summary>
+        private readonly System.Threading.SemaphoreSlim _configLock = new System.Threading.SemaphoreSlim(1, 1);
+
         // IGitHubPlugin -> adds the "Report an issue" menu
         public string RepositoryName => "user-security-role-table-access";
         public string UserName => "TheMarkChristie";
@@ -118,36 +125,45 @@ namespace UserSecurityRoleTableAccess
         {
             if (!_webReady) return;
 
-            // inject config BEFORE any document script runs
-            var configJs = string.IsNullOrEmpty(_orgUrl)
-                ? "window.XTB_CONFIG = undefined;"
-                : "window.XTB_CONFIG = { baseUrl: " + JsString(_orgUrl) +
-                  ", token: " + JsString(_token) +
-                  ", userName: " + JsString(_userName) + " };";
-
-            // Replace the previous script rather than stacking another one: UpdateConnection fires on
-            // every org switch, and WebView2 does not guarantee the relative order of registered
-            // scripts, so leftovers could hand the page a stale org URL and token.
-            if (_configScriptId != null)
+            await _configLock.WaitAsync();
+            try
             {
-                _web.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_configScriptId);
-                _configScriptId = null;
+
+                // inject config BEFORE any document script runs
+                var configJs = string.IsNullOrEmpty(_orgUrl)
+                    ? "window.XTB_CONFIG = undefined;"
+                    : "window.XTB_CONFIG = { baseUrl: " + JsString(_orgUrl) +
+                      ", token: " + JsString(_token) +
+                      ", userName: " + JsString(_userName) + " };";
+
+                // Replace the previous script rather than stacking another one: UpdateConnection fires on
+                // every org switch, and WebView2 does not guarantee the relative order of registered
+                // scripts, so leftovers could hand the page a stale org URL and token.
+                if (_configScriptId != null)
+                {
+                    _web.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_configScriptId);
+                    _configScriptId = null;
+                }
+                _configScriptId = await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(configJs);
+
+                var html = Path.Combine(
+                    Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".",
+                    "app", "index.html");
+
+                if (File.Exists(html))
+                    // via the virtual host, so the page has a real origin for the Dataverse CORS preflight
+                    _web.CoreWebView2.Navigate("https://" + VirtualHost + "/index.html");
+                else
+                    _web.CoreWebView2.NavigateToString(
+                        "<h3 style='font-family:Segoe UI'>app/index.html not found next to the plugin dll.</h3>" +
+                        "<p>The build copies prx3_UserSecurityRoleTableAccess.html into the output 'app' folder. " +
+                        "Run <code>node xrmtoolbox\\build-app.js</code> and rebuild the project. " +
+                        "(That step needs Node on PATH and fails quietly without it.)</p>");
             }
-            _configScriptId = await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(configJs);
-
-            var html = Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".",
-                "app", "index.html");
-
-            if (File.Exists(html))
-                // via the virtual host, so the page has a real origin for the Dataverse CORS preflight
-                _web.CoreWebView2.Navigate("https://" + VirtualHost + "/index.html");
-            else
-                _web.CoreWebView2.NavigateToString(
-                    "<h3 style='font-family:Segoe UI'>app/index.html not found next to the plugin dll.</h3>" +
-                    "<p>The build copies prx3_UserSecurityRoleTableAccess.html into the output 'app' folder. " +
-                    "Run <code>node xrmtoolbox\\build-app.js</code> and rebuild the project. " +
-                    "(That step needs Node on PATH and fails quietly without it.)</p>");
+            finally
+            {
+                _configLock.Release();
+            }
         }
 
         /// <summary>Open a URL in the user's real browser rather than inside the token-bearing WebView.</summary>

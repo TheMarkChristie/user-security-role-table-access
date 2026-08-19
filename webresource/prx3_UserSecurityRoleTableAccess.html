@@ -692,8 +692,19 @@ function esc(s){ return (s==null?"":String(s)); }
 function lower(g){ return (g||"").toLowerCase(); }
 var EMDASH = "\u2014";
 
-function boot(main,sub){ var b=$("boot"); if(!b) return; show(b,true); $("bootMain").textContent=main||""; $("bootSub").textContent=sub||""; }
-function bootDone(){ show($("boot"),false); }
+// Loads nest (a permission fold triggers a metadata load triggers a column-security load), so count
+// depth: the first bootDone of an inner load must not hide the spinner the outer one is still using.
+var _bootDepth = 0;
+function boot(main,sub){
+  var b=$("boot"); if(!b) return;
+  _bootDepth++;
+  show(b,true); $("bootMain").textContent=main||""; $("bootSub").textContent=sub||"";
+}
+function bootDone(){
+  _bootDepth = Math.max(0, _bootDepth - 1);
+  if(_bootDepth === 0) show($("boot"),false);
+}
+function bootReset(){ _bootDepth = 0; show($("boot"),false); }
 function banner(host,kind,title,detail){
   var h = typeof host==="string" ? $(host) : host;
   if(!h) return;
@@ -1308,7 +1319,7 @@ async function loadMeta(){
     return S.meta;
   })().catch(function(e){
     S.metaLoading = null;    // let the next attempt retry rather than failing forever
-    bootDone();
+    bootReset();
     throw e;
   });
   return S.metaLoading;
@@ -1451,7 +1462,7 @@ async function loadSecuredColumns(){
     S.secured = out;
     bootDone();
     return out;
-  })().catch(function(e){ S.securedLoading = null; bootDone(); throw e; });
+  })().catch(function(e){ S.securedLoading = null; bootReset(); throw e; });
   return S.securedLoading;
 }
 function metaLabel(d){
@@ -1644,7 +1655,7 @@ async function refreshCols(){
     res = await columnAccessFor(u);       // shared with the Table access tab's CS column
   }catch(e){
     if(run !== _colRun) return;
-    bootDone();
+    bootReset();
     S.colRows = null; S.colUser = null;
     banner("colHead","error","Could not read column security.", (e && e.message) || String(e));
     renderCols();
@@ -1951,9 +1962,13 @@ function filteredPerms(){
    Column security tab already filtered to this table. */
 function csCell(r){
   if(!S.permRows.haveCols)
-    return el("span",{class:"cell d0", text:"?", title:"Column security could not be read - see the note above the grid"});
+    return el("span",{class:"cell d0", text:"?", role:"img",
+      title:"Column security could not be read - see the note above the grid",
+      "aria-label":"Column security on " + r.table.label + ": could not be read"});
   if(!r.cs || !r.cs.total)
-    return el("span",{class:"cell d0", text:EMDASH, title:"No columns on this table are secured"});
+    return el("span",{class:"cell d0", text:EMDASH, role:"img",
+      title:"No columns on this table are secured",
+      "aria-label":"Column security on " + r.table.label + ": no secured columns"});
 
   var partial = !!S.permRows.colsPartial;
   var b = el("button",{class:"cell " + (r.cs.reachable ? "d4" : "d0"), type:"button",
@@ -2040,7 +2055,7 @@ async function refreshPerms(){
     rows = await computePermissions(u);
   }catch(e){
     if(run !== _permRun) return;
-    bootDone();
+    bootReset();
     S.permUser = null; S.permRows = null;
     banner("permHead","error","Could not work out this user's access.", e.message||String(e));
     renderPerms();
@@ -2245,9 +2260,15 @@ async function refreshTargetRoles(users){
     u._roles = rs.map(function(r){ return lower(r.roleid); });
     var ts = await S.api.userTeams(u.systemuserid);
     u._teams = ts.map(function(t){ return lower(t.teamid); });
-    // no try/catch: a failed re-read must reach the sentinel below, not leave stale data behind
-    var fresh = await S.api.get("systemusers(" + u.systemuserid + ")?$select=_businessunitid_value");
-    u._bu = lower(fresh && fresh._businessunitid_value);
+    // A plain entity-set query, not a key predicate: the key-predicate form is one of the shapes
+    // ToolBox's queryData cannot model. No try/catch either - a failed re-read must reach the sentinel
+    // below rather than quietly leaving stale data in place.
+    var fresh = await S.api.get("systemusers?$select=systemuserid,_businessunitid_value" +
+                                "&$filter=systemuserid eq " + u.systemuserid);
+    var row = fresh && fresh.value && fresh.value[0];
+    if(!row || !row._businessunitid_value)
+      throw new Error("could not read the current business unit of " + u._name);
+    u._bu = lower(row._businessunitid_value);
   });
   // mapLimit turns rejections into sentinels and never throws, so inspect them or a failed re-read
   // silently leaves stale data in place and the "nothing moved" guard passes on data it never checked.
@@ -2351,6 +2372,7 @@ async function planCopyItem(plan, src, u, srcProfiles){
   var have = {};
   u._roles.forEach(function(rid){ var r = S.rolesById[rid]; if(r) have[r._root] = r; });
 
+  it._mirror = mirror;                    // cancelMove needs these to re-mirror if the move falls through
   if(want.roles){
     var srcRoles = checkedSourceRoles();    // honour the operator's tick boxes for what to COPY
     // ...but Mirror's keep-set is the source's FULL role list. Unticking means "do not copy this",
@@ -2358,6 +2380,7 @@ async function planCopyItem(plan, src, u, srcProfiles){
     var keep = {};
     sourceRoles().forEach(function(r){ keep[r._root] = r; });
     srcRoles.forEach(function(r){ wantRoles[r._root] = r; });
+    it._keep = keep;
     if(!mirror) for(var k in have) wantRoles[k] = have[k];      // Add mode keeps what they already had
     if(mirror && !it.bu){
       u._roles.forEach(function(rid){
@@ -2403,11 +2426,14 @@ async function planCopyItem(plan, src, u, srcProfiles){
     var keepP = {}; srcProfiles.forEach(function(x){ keepP[x.id] = x; });
     srcProfiles.forEach(function(x){
       if(x.via === "team") return;                       // belongs to the team, not the user
+      if(x.id === SYSADMIN_FS_PROFILE) return;           // the platform's own record of every secured
+                                                         // column, not a grant to hand around
       if(hasP[x.id]) it.skip.push({kind:"profile", thing:x});
       else it.add.push({kind:"profile", thing:x});
     });
     if(mirror) mine.forEach(function(x){
       if(x.via === "team" || keepP[x.id]) return;
+      if(x.id === SYSADMIN_FS_PROFILE) return;           // never strip the platform's own profile
       it.remove.push({kind:"profile", thing:x});
     });
   }
@@ -2520,6 +2546,18 @@ function cancelMove(it, why){
     else if(held[eq._root]) it.skip.push({kind:"role", thing:eq});
     else it.add.push({kind:"role", thing:eq, from:src});
   });
+
+  // Mirror's removals were skipped while a move was planned, because the move would have wiped those
+  // roles anyway. With the move cancelled they have to be performed properly, or Mirror quietly turns
+  // into Add and the targets keep roles the source does not have.
+  if(it._mirror && it._keep){
+    it.user._roles.forEach(function(rid){
+      var r = S.rolesById[rid];
+      if(!r || it._keep[r._root] || isAutoAssigned(r)) return;
+      if(it.remove.some(function(x){ return x.kind === "role" && x.thing._root === r._root; })) return;
+      it.remove.push({kind:"role", thing:r});
+    });
+  }
 }
 function finishItem(it){
   if(it.bu){
@@ -3040,7 +3078,8 @@ function wire(){
 
   $("cSource").addEventListener("change", function(){ renderSourceRoles(); renderCopyTargets(); });
   $("cMode").addEventListener("change", invalidatePlan);
-  $("cOp").addEventListener("change", function(){ syncOpUi(); invalidatePlan(); });
+  // targetUsers() excludes the source only in copy mode, so the card's contents change with the mode
+  $("cOp").addEventListener("change", function(){ syncOpUi(); renderCopyTargets(); });
   ["wRoles","wProfiles","wTeams","wBu","aRole","aProfile","aTeam","aBu","aAction"].forEach(function(id){
     $(id).addEventListener("change", invalidatePlan);
   });
@@ -3132,7 +3171,7 @@ async function start(){
   try{
     await loadOrg();
   }catch(e){
-    bootDone();
+    bootReset();
     banner("globalMsg","error","Could not load the environment.",
       (e.message||String(e)) + "  Reading users, roles and privileges needs read access to the System User, " +
       "Security Role, Team and Privilege tables — a System Administrator or System Customizer normally has it.");
