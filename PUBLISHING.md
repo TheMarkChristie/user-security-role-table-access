@@ -99,7 +99,7 @@ above; a PPTB account for the submission form.
    *Data* are the right ones here.
 
 **Updating later:** bump `version` in `pptb/package.json` → `npm run build` → `npx
-pptb-validate` → `npm publish`. The registry tracks the npm version.
+@pptb/validate` → `npm publish`. The registry tracks the npm version.
 
 ---
 

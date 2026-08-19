@@ -1663,7 +1663,8 @@ async function refreshCols(){
   }
   if(run !== _colRun) return;
   S.colUser = u; S.colRows = res;
-  S.colCache[u._id] = res;
+  // no cache write here: columnAccessFor already stored it if - and only if - the answer was complete.
+  // Writing again unconditionally would freeze a partial result for the rest of the session.
 
   var head = $("colHead");
 
@@ -2898,8 +2899,21 @@ function exportPerms(){
   var rows = [["User", u._name],["Username", u.domainname||""],["Business unit",(S.busById[u._bu]||{}).name||""],
               ["Roles", S.permRows.roles.map(function(r){
                  var role=S.rolesById[r.roleId]||{name:r.roleId};
-                 return role.name + (r.via==="team" ? " (via "+r.viaName+")" : ""); }).join("; ")],
-              [],head];
+                 return role.name + (r.via==="team" ? " (via "+r.viaName+")" : ""); }).join("; ")]];
+  // Every qualifier the screen carries has to reach the file too. A blank verb cell for a role we could
+  // not read is otherwise indistinguishable from a genuine "no access" to whoever opens this later.
+  if(isSysAdmin(u))
+    rows.push(["NOTE","This user is a System Administrator. That role bypasses the security model entirely, so the levels below are a formality - they can do anything in the environment."]);
+  if(S.permRows.failed.length)
+    rows.push(["WARNING","Could not read " + S.permRows.failed.length + " role(s): " +
+      S.permRows.failed.map(function(f){ return (f.role && f.role.name) || "?"; }).join("; ") +
+      ". Anything those roles grant is MISSING from this export - a blank cell may mean 'unknown', not 'no access'."]);
+  if(S.permRows.colsError)
+    rows.push(["WARNING","Column security could not be read, so the secured-column counts are unknown."]);
+  else if(S.permRows.colsPartial)
+    rows.push(["WARNING","Some column security profiles could not be read (" + S.permRows.colsPartial.join("; ") +
+      "), so the secured-column counts are minimums, not totals."]);
+  rows = rows.concat([[],head]);
   // export exactly what the grid is showing, so the CSV and the screen never disagree
   filteredPerms().forEach(function(r){
     rows.push([r.table.label, r.table.logical].concat(VERBS.map(function(v){

@@ -10,7 +10,7 @@ decisions exist because the obvious alternative is quietly wrong.
 
 | Host | Detected by | Transport |
 | --- | --- | --- |
-| Power Platform ToolBox | `window.dataverseAPI` | `dataverseAPI.*`, falling back to `fetch` with the org URL from `toolboxAPI.connections.getActive()` |
+| Power Platform ToolBox | `window.dataverseAPI` | `dataverseAPI.*` only — a raw `fetch` there carries no credentials. Org URL from `toolboxAPI.connections.getActiveConnection()` |
 | XrmToolBox | `window.XTB_CONFIG` | `fetch` with a bearer token injected by the plugin, from a virtual `https://` origin (see below) |
 | D365 web resource | `Xrm` present, or a `*.dynamics.com` origin | same-origin `fetch` with cookies |
 | Standalone | none of the above | `fetch` with a hand-pasted URL + token |
