@@ -2462,7 +2462,7 @@ function planAssignItem(plan, u){
       // would assign it twice and the second call would fail as a duplicate.
       var inReapply = it.reapply.some(function(x){ return x.thing._root === a.role._root; });
       if(adding)      (held && (!it.bu || inReapply) ? it.skip : it.add).push({kind:"role", thing:eq});
-      else            (held ? it.remove : it.skip).push({kind:"role", thing:eq});
+      else            (held ? it.remove : it.skip).push({kind:"role", thing:eq, from:a.role});
     }
   }
   if(a.profile){
@@ -2497,10 +2497,22 @@ function cancelMove(it, why){
   var redo = it.reapply.concat(it.add.filter(function(x){ return x.kind === "role"; }));
   it.reapply = [];
   it.add = it.add.filter(function(x){ return x.kind !== "role"; });
-  it.remove = it.remove.filter(function(x){ return !x.byMove; });
   it.unmatched = it.unmatched.filter(function(x){ return x.kind !== "role"; });
   var held = {};
   it.user._roles.forEach(function(rid){ var r = S.rolesById[rid]; if(r) held[r._root] = 1; });
+
+  // Role removals were resolved against the destination unit too. Re-point them at the unit the user is
+  // actually staying in, and drop any they turn out not to hold - a DELETE against the other unit's copy
+  // of the same role just fails, and both copies share a name so the error is unreadable.
+  var undo = it.remove.filter(function(x){ return x.kind === "role" && !x.byMove; });
+  it.remove = it.remove.filter(function(x){ return x.kind !== "role"; });
+  undo.forEach(function(x){
+    var src = x.from || x.thing;
+    var eq = resolveRoleForBu(src, stay);
+    if(eq && held[eq._root]) it.remove.push({kind:"role", thing:eq, from:src});
+    else it.skip.push({kind:"role", thing:src});
+  });
+
   redo.forEach(function(x){
     var src = x.from || x.thing;
     var eq = resolveRoleForBu(src, stay);
