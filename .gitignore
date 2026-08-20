@@ -28,3 +28,7 @@ desktop.ini
 logo.png
 icon32.png
 icon80.png
+
+# copied into the npm package by pptb/build.js; the repo root holds the originals
+pptb/README.md
+pptb/LICENSE

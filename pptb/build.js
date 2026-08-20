@@ -32,5 +32,12 @@ const html = fs.readFileSync(srcHtml, "utf8");
 fs.writeFileSync(path.join(dist, "index.html"), html, "utf8");
 fs.copyFileSync(srcIcon, path.join(dist, ICON));
 
+// npm only picks up README and LICENSE from the package directory, and ours live at the repo root -
+// without these the published tarball has neither, so npmjs.com shows no readme and the installed tool
+// folder carries no licence. Copies, so the repo root stays the single source of truth.
+for (const f of ["README.md", "LICENSE"]) {
+  fs.copyFileSync(path.join(root, "..", f), path.join(root, f));
+}
+
 console.log("Built dist/ from", path.relative(root, srcHtml));
-console.log("  dist/index.html (" + html.length + " bytes), dist/" + ICON);
+console.log("  dist/index.html (" + html.length + " bytes), dist/" + ICON + ", README.md, LICENSE");
