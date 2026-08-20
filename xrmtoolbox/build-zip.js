@@ -52,7 +52,10 @@ for (const f of fs.readdirSync(pkgSrc)) {
 }
 
 const zip = path.join(dist, "UserSecurityRoleTableAccess-" + version + ".zip");
-fs.rmSync(zip, { force: true });
+// clear older versions too, so _dist never offers two zips and leaves you guessing which is current
+for (const f of fs.readdirSync(dist)) {
+  if (/^UserSecurityRoleTableAccess-.*\.zip$/.test(f)) fs.rmSync(path.join(dist, f), { force: true });
+}
 
 // Compress-Archive rather than tar: GNU tar on Windows mangles the entry paths, and
 // Compress-Archive produces a zip File Explorer opens without complaint.

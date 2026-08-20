@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>MarkChristie.UserSecurityRoleTableAccess</id>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <title>User Security Role Table Access</title>
     <authors>Mark Christie</authors>
     <owners>Mark Christie</owners>

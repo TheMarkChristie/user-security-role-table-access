@@ -32,3 +32,4 @@ icon80.png
 # copied into the npm package by pptb/build.js; the repo root holds the originals
 pptb/README.md
 pptb/LICENSE
+pptb/npm-shrinkwrap.json

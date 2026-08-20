@@ -54,6 +54,20 @@ foreach ($t in @("$proj\app\index.html", "$root\pptb\dist\index.html")) {
   else { Bad "$t is not a copy of the current source (delta $d bytes)" }
 }
 
+Step 'The ToolBox package has what the registry requires'
+# structure_validation rejects a package without this, and it carries the version
+$sw = "$root\pptb\npm-shrinkwrap.json"
+if (Test-Path $sw) {
+  # not ConvertFrom-Json: the lockfile has a "" key under packages, which PowerShell cannot
+  # turn into a property ("the value of argument name is not valid")
+  $swv = ([regex]::Match((Get-Content $sw -Raw), '"version"\s*:\s*"([^"]+)"')).Groups[1].Value
+  if ($swv -eq $v.pptb) { Ok "npm-shrinkwrap.json present, version $swv" }
+  else { Bad "npm-shrinkwrap.json says $swv but package.json says $($v.pptb)" }
+} else { Bad 'pptb/npm-shrinkwrap.json is missing - the Tool Registry will reject the package' }
+foreach ($f in @('README.md','LICENSE')) {
+  if (Test-Path "$root\pptb\$f") { Ok "$f copied into the package" } else { Bad "pptb/$f missing" }
+}
+
 Step 'JavaScript parses'
 $js = [IO.File]::ReadAllText("$root\webresource\prx3_UserSecurityRoleTableAccess.html")
 $m = [regex]::Match($js, '(?s)<script>(.*)</script>')

@@ -39,5 +39,18 @@ for (const f of ["README.md", "LICENSE"]) {
   fs.copyFileSync(path.join(root, "..", f), path.join(root, f));
 }
 
+// The Power Platform ToolBox registry rejects a package without npm-shrinkwrap.json
+// ("structure_validation: npm-shrinkwrap.json is required but not found in the package").
+// It embeds the version, so generate it here rather than hand-maintaining a file that would
+// silently go stale on the next bump. This tool has no dependencies, so the shape is fixed.
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+fs.writeFileSync(path.join(root, "npm-shrinkwrap.json"), JSON.stringify({
+  name: manifest.name,
+  version: manifest.version,
+  lockfileVersion: 3,
+  requires: true,
+  packages: { "": { name: manifest.name, version: manifest.version, license: manifest.license } }
+}, null, 2) + "\n", "utf8");
+
 console.log("Built dist/ from", path.relative(root, srcHtml));
-console.log("  dist/index.html (" + html.length + " bytes), dist/" + ICON + ", README.md, LICENSE");
+console.log("  dist/index.html (" + html.length + " bytes), dist/" + ICON + ", README.md, LICENSE, npm-shrinkwrap.json");
