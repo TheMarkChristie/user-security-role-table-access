@@ -485,12 +485,12 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
     <!-- ============================ COPY & ASSIGN ============================ -->
     <section role="tabpanel" id="panCopy" aria-labelledby="tabCopy" tabindex="0" class="hidden">
       <div class="bar warn">
-        <b>The write features have not yet been run against a live environment.</b>
-        Copying roles, profiles, teams and especially <strong>business units</strong> changes real access and
-        cannot be undone. Read the preview line by line, start with one user, and check the result before
-        doing it in bulk. Moving a business unit removes every security role the user has — this tool
-        re-applies the equivalents in the new unit immediately afterwards, but that is exactly the sort of
-        thing to verify on a test account first.
+        <b>These changes are real and there is no undo.</b>
+        Read the preview line by line, and start with one user before doing anything in bulk. Moving a
+        business unit is the one to watch: Dataverse removes <em>every</em> security role the user has, and
+        this tool re-applies the equivalents in the new unit straight afterwards — so if one of them has no
+        counterpart there, the user comes out with less than they went in with. The preview tells you which,
+        before you commit to it.
       </div>
       <div class="card">
         <h2>1. What to do</h2>

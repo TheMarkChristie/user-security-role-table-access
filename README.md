@@ -215,7 +215,9 @@ Administrator has everything it needs.
 | `xrmtoolbox/install.cmd` / `install.ps1` | Local install into the XrmToolBox Plugins folder |
 | `pptb/` | Power Platform ToolBox manifest and build |
 | `docs/ARCHITECTURE.md` | How the permission computation and role copy work |
-| `PUBLISHING.md` | Release steps for both tool libraries |
+| `release.ps1` | Rebuilds and verifies every artefact; run before publishing |
+| `DEPLOY.md` | The deploy runbook — what to run, in what order, and what blocks what |
+| `PUBLISHING.md` | Reference detail behind those steps |
 | `xrmtoolbox/gen-icondata.ps1` | Regenerates the icon PNGs and `IconData.cs` from `icon.svg` |
 | `icon.svg` | The one source icon — everything else (`icon.png`, `icon32/80.png`, the PPTB SVG, the inline header mark) derives from it |
 | `_dist/` | Built release artefacts: the hand-install ZIP and the NuGet package |
