@@ -34,7 +34,39 @@ And that `icon.png` is at the repo root, because the tile icon comes from there.
 
 ## 1. XrmToolBox → Tool Library
 
-**You need:** a [nuget.org](https://www.nuget.org) account and an API key.
+Two routes. Pick one.
+
+### 1a. Trusted Publishing (no stored key) — `.github/workflows/publish-nuget.yml`
+
+Create the policy on nuget.org → **API keys → Trusted Publishing**, matching this exactly:
+
+| Field | Value |
+| --- | --- |
+| Package Owner | `TheMarkChristie` |
+| CI/CD Provider | GitHub Actions |
+| Repository Owner | `TheMarkChristie` |
+| Repository | `user-security-role-table-access` |
+| Workflow File | `publish-nuget.yml` |
+| Environment | *(blank)* |
+| Scopes | Push → **Push new packages and package versions** |
+| Glob Patterns | `MarkChristie.*` |
+
+The workflow file name is part of the trust — renaming it breaks the policy. Then publish by cutting a
+GitHub release, or run the workflow by hand with **Dry run** unticked:
+
+```powershell
+gh release create v1.0.0 --title "v1.0.0" --notes-file - < DEPLOY-notes.md
+# or, to test the build without pushing:
+gh workflow run publish-nuget.yml -f dryRun=true
+```
+
+A dry run builds, packs, verifies the package contents and uploads the `.nupkg` as an artefact without
+touching nuget.org — worth doing once before the real thing.
+
+### 1b. A plain API key, pushed from here
+
+**You need:** a [nuget.org](https://www.nuget.org) account and an API key (the *other* tab — no
+repository fields). Scope it Push → *Push new packages and package versions*, glob `MarkChristie.*`.
 
 ```powershell
 cd V:\PCF\UserSecurityRoleTableAccess

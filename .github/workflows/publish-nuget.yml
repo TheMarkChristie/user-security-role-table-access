@@ -1,0 +1,105 @@
+# Publishes the XrmToolBox plugin to nuget.org, from which the XrmToolBox Tool Library picks it up.
+#
+# Uses NuGet Trusted Publishing: no long-lived API key is stored anywhere. nuget.org trusts a policy
+# naming this repository and this workflow file, and NuGet/login exchanges the job's OIDC token for a
+# short-lived key. The policy on nuget.org must therefore match:
+#
+#     Repository Owner  TheMarkChristie
+#     Repository        user-security-role-table-access
+#     Workflow File     publish-nuget.yml     <- this file's name; renaming it breaks the trust
+#     Environment       (blank)
+#     Scopes            Push new packages and package versions
+#     Glob Patterns     MarkChristie.*
+#
+# windows-latest, not ubuntu: the plugin targets net48 and hosts WebView2.
+
+name: Publish to NuGet
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Build and pack, but do not push'
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write   # required to mint the short-lived NuGet key
+  contents: read
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # build-app.js copies the one source HTML into the plugin's app/ folder
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build
+        working-directory: xrmtoolbox/UserSecurityRoleTableAccess
+        run: dotnet build -c Release --nologo
+
+      - name: Check the version is consistent everywhere
+        shell: pwsh
+        run: |
+          $proj = 'xrmtoolbox/UserSecurityRoleTableAccess'
+          $v = @(
+            ([xml](Get-Content "$proj/UserSecurityRoleTableAccess.csproj")).Project.PropertyGroup.Version
+            ([xml](Get-Content "$proj/UserSecurityRoleTableAccess.nuspec")).package.metadata.version
+            (Get-Content 'pptb/package.json' -Raw | ConvertFrom-Json).version
+            (Select-String 'webresource/prx3_UserSecurityRoleTableAccess.html' -Pattern 'APP_VERSION = "(.*?)"').Matches[0].Groups[1].Value
+          ) | Select-Object -Unique
+          if (@($v).Count -ne 1) { throw "versions disagree: $($v -join ', ')" }
+          Write-Host "version $(@($v)[0])"
+
+      - name: Pack
+        working-directory: xrmtoolbox/UserSecurityRoleTableAccess
+        # NU5100 is expected and correct: an XrmToolBox plugin dll belongs in Plugins\, not lib\
+        run: >
+          dotnet pack UserSecurityRoleTableAccess.csproj -c Release --no-build --nologo
+          -p:NuspecFile=UserSecurityRoleTableAccess.nuspec
+          -p:NuspecBasePath=.
+          --output ${{ github.workspace }}/_dist
+
+      - name: Check the package carries what the Tool Library needs
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $pkg = (Get-ChildItem "_dist/*.nupkg").FullName
+          $z = [IO.Compression.ZipFile]::OpenRead($pkg)
+          $names = $z.Entries.FullName
+          $z.Dispose()
+          foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/index.html','icon.png','README.md')) {
+            if ($names -notcontains $need) { throw "missing from nupkg: $need" }
+            Write-Host "ok $need"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: _dist/*.nupkg
+
+      - name: Get a short-lived NuGet key
+        if: github.event_name == 'release' || inputs.dryRun == false
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: TheMarkChristie
+
+      - name: Push
+        if: github.event_name == 'release' || inputs.dryRun == false
+        run: >
+          dotnet nuget push _dist/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
