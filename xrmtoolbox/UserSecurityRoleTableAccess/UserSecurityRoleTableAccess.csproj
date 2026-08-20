@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    XrmToolBox plugin: User Security Role Table Access.
+    XrmToolBox plugin: User Access Explorer.
     Thin WebView2 host around the shared prx3_UserSecurityRoleTableAccess.html.
     Targets .NET Framework 4.8 (required by XrmToolBox).
   -->
@@ -11,10 +11,10 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>UserSecurityRoleTableAccess</AssemblyName>
     <RootNamespace>UserSecurityRoleTableAccess</RootNamespace>
-    <Product>User Security Role Table Access</Product>
+    <Product>User Access Explorer</Product>
     <Company>Mark Christie</Company>
     <Authors>Mark Christie</Authors>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
   </PropertyGroup>
 
   <ItemGroup>

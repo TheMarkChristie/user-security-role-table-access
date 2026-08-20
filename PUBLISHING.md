@@ -1,4 +1,4 @@
-# Publishing — User Security Role Table Access
+# Publishing — User Access Explorer
 
 Two tools to publish, both authored by **Mark Christie**. They share the one HTML UI but ship
 through different channels:
@@ -61,7 +61,7 @@ cd V:\PCF\UserSecurityRoleTableAccess\xrmtoolbox\UserSecurityRoleTableAccess
 dotnet build -c Release
 ..\install.cmd
 ```
-Then restart XrmToolBox → the tool appears as **User Security Role Table Access**.
+Then restart XrmToolBox → the tool appears as **User Access Explorer**.
 
 **Updating later:** bump csproj `<Version>` + nuspec `<version>` together → `dotnet build -c
 Release` → `nuget pack` → `nuget push`. The Tool Library picks up the new version automatically.

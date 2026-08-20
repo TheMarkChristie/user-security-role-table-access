@@ -10,7 +10,7 @@ namespace UserSecurityRoleTableAccess
     /// into the Plugins folder.
     /// </summary>
     [Export(typeof(IXrmToolBoxPlugin))]
-    [ExportMetadata("Name", "User Security Role Table Access")]
+    [ExportMetadata("Name", "User Access Explorer")]
     [ExportMetadata("Description",
         "See exactly what everyone in your Dataverse environment can do, and change it in bulk. " +
         "Lists every user with the security roles they have, showing which were given to them directly " +

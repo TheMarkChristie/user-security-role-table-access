@@ -1,5 +1,5 @@
 <#
-    User Security Role Table Access - installer for XrmToolBox
+    User Access Explorer - installer for XrmToolBox
     by Mark Christie  (https://github.com/TheMarkChristie)
 
     Copies the plugin into your XrmToolBox Plugins folder. Nothing else on the machine is touched,
@@ -21,7 +21,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $src  = Join-Path $here 'Plugins'
 
 Write-Host ''
-Write-Host '  User Security Role Table Access - XrmToolBox installer' -ForegroundColor Cyan
+Write-Host '  User Access Explorer - XrmToolBox installer' -ForegroundColor Cyan
 Write-Host '  by Mark Christie' -ForegroundColor DarkGray
 Write-Host ''
 
@@ -87,6 +87,6 @@ Write-Host '  Installed:' -ForegroundColor Green
 Write-Host "    $dst\UserSecurityRoleTableAccess.dll"
 Write-Host "    $dst\app\index.html"
 Write-Host ''
-Write-Host '  Next: start (or restart) XrmToolBox and open "User Security Role Table Access".' -ForegroundColor Cyan
+Write-Host '  Next: start (or restart) XrmToolBox and open "User Access Explorer".' -ForegroundColor Cyan
 Write-Host '  Connect with an OAuth / MFA connection - the tool needs an access token.' -ForegroundColor DarkGray
 Write-Host ''

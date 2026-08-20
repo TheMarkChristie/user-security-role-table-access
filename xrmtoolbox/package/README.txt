@@ -1,5 +1,5 @@
 ================================================================================
-  USER SECURITY ROLE TABLE ACCESS  v1.0.3  --  a tool for XrmToolBox
+  USER ACCESS EXPLORER  v1.0.4  --  a tool for XrmToolBox
   by Mark Christie   https://github.com/TheMarkChristie
 ================================================================================
 
@@ -64,7 +64,7 @@ INSTALL
 
   2. Double-click  Install.cmd
 
-  3. Start XrmToolBox and open "User Security Role Table Access".
+  3. Start XrmToolBox and open "User Access Explorer".
 
   If Windows shows a SmartScreen warning, that is because the zip came from the
   internet: choose "More info" then "Run anyway", or right-click the zip BEFORE

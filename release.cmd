@@ -1,5 +1,5 @@
 @echo off
-REM Release build for User Security Role Table Access.
+REM Release build for User Access Explorer.
 REM Wrapper so this runs regardless of the machine's PowerShell execution policy, which on a default
 REM Windows install is Restricted and blocks .ps1 files outright.
 REM

@@ -1,4 +1,4 @@
-# Installs the compiled User Security Role Table Access plugin into XrmToolBox.
+# Installs the compiled User Access Explorer plugin into XrmToolBox.
 # XrmToolBox already ships WebView2 + the Dataverse SDK, so we copy ONLY our plugin dll
 # and its bundled app/ (the shared HTML) to avoid assembly version conflicts.
 $ErrorActionPreference = 'Stop'
@@ -24,4 +24,4 @@ New-Item -ItemType Directory -Force (Join-Path $dst 'app') | Out-Null
 Copy-IfChanged (Join-Path $src 'app\index.html') (Join-Path $dst 'app\index.html')
 
 Write-Host "Installed UserSecurityRoleTableAccess.dll + app\index.html to:`n  $dst" -ForegroundColor Green
-Write-Host "Restart XrmToolBox -> tool 'User Security Role Table Access'." -ForegroundColor Yellow
+Write-Host "Restart XrmToolBox -> tool 'User Access Explorer'." -ForegroundColor Yellow

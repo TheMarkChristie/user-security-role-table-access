@@ -1,4 +1,4 @@
-# Architecture — User Security Role Table Access
+# Architecture — User Access Explorer
 
 One HTML file, three hosts, no build step for the UI. This document records how the tool talks to
 Dataverse and, more importantly, **why each call was chosen over the obvious alternative**. Most of these

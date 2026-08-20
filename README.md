@@ -1,4 +1,4 @@
-# User Security Role Table Access
+# User Access Explorer
 
 **See exactly what everyone in your Dataverse environment can do, and change it in bulk.**
 
@@ -157,7 +157,7 @@ only `UserSecurityRoleTableAccess.dll` and `app\index.html` into `%APPDATA%\Mscr
 XrmToolBox already ships WebView2 and the Dataverse SDK, and shipping our own copies would clash with
 other tools. To uninstall, delete those two files.
 
-**Restart XrmToolBox**, then open **User Security Role Table Access**. Plugins are discovered at startup, so a
+**Restart XrmToolBox**, then open **User Access Explorer**. Plugins are discovered at startup, so a
 running instance will not see it until it restarts.
 
 The plugin is a thin WebView2 host: it pushes the active connection's org URL and OAuth token into the page

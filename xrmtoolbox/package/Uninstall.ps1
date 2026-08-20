@@ -1,5 +1,5 @@
 <#
-    User Security Role Table Access - uninstaller for XrmToolBox
+    User Access Explorer - uninstaller for XrmToolBox
     by Mark Christie  (https://github.com/TheMarkChristie)
 
     Removes the two files the installer copied. Nothing else is touched.
@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 $dst = if ($PluginsPath) { $PluginsPath } else { Join-Path $env:APPDATA 'MscrmTools\XrmToolBox\Plugins' }
 
 Write-Host ''
-Write-Host '  User Security Role Table Access - uninstaller' -ForegroundColor Cyan
+Write-Host '  User Access Explorer - uninstaller' -ForegroundColor Cyan
 Write-Host ''
 
 $running = Get-Process XrmToolBox -ErrorAction SilentlyContinue

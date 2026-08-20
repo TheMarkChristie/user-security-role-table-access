@@ -13,7 +13,7 @@ using XrmToolBox.Extensibility.Interfaces;
 namespace UserSecurityRoleTableAccess
 {
     /// <summary>
-    /// WebView2 host for the shared User Security Role Table Access HTML app. On every connection
+    /// WebView2 host for the shared User Access Explorer HTML app. On every connection
     /// change we push the org URL + a fresh OAuth access token into the page as
     /// window.XTB_CONFIG, then (re)load it so the JS picks "XrmToolBox (WebView2)" mode and
     /// calls the Dataverse Web API directly.
@@ -112,7 +112,7 @@ namespace UserSecurityRoleTableAccess
                     _token = fresh;
                     _web.CoreWebView2.PostWebMessageAsJson(
                         "{\"type\":\"token\",\"token\":" + JsString(fresh) + "}");
-                    LogInfo("User Security Role Table Access: refreshed the access token for the page.");
+                    LogInfo("User Access Explorer: refreshed the access token for the page.");
                 }
                 catch (Exception ex) { LogError("Token refresh failed: " + ex.Message); }
             };
@@ -206,7 +206,7 @@ namespace UserSecurityRoleTableAccess
                     LogWarning("No OAuth access token available on this connection — " +
                                "the page will fall back to its manual token panel. Use an OAuth/MFA connection.");
                 else
-                    LogInfo("User Security Role Table Access connected to " + _orgUrl);
+                    LogInfo("User Access Explorer connected to " + _orgUrl);
             }
             catch (Exception ex)
             {

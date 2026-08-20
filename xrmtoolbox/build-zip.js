@@ -1,5 +1,5 @@
 /**
- * Builds the redistributable ZIP for people who install User Security Role Table Access by hand,
+ * Builds the redistributable ZIP for people who install User Access Explorer by hand,
  * without going through the XrmToolBox Tool Library.
  *
  * Layout inside the zip (Plugins/ mirrors the folder it is copied into, so a manual

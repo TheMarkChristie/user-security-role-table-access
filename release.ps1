@@ -1,5 +1,5 @@
 <#
-    User Security Role Table Access - release build.
+    User Access Explorer - release build.
     by Mark Christie  (https://github.com/TheMarkChristie)
 
     Rebuilds every artefact from the one source file and checks the things that are easy to get wrong
