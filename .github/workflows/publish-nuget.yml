@@ -98,8 +98,16 @@ jobs:
 
       - name: Push
         if: github.event_name == 'release' || inputs.dryRun == false
-        run: >
-          dotnet nuget push _dist/*.nupkg
-          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+        shell: pwsh
+        # Resolve the file rather than passing a glob: the shell here is pwsh, which does not expand
+        # wildcards for native commands, so dotnet receives the literal "_dist/*.nupkg" and fails with
+        # "File does not exist".
+        run: |
+          $pkg = (Get-ChildItem "$env:GITHUB_WORKSPACE/_dist/*.nupkg" | Select-Object -First 1).FullName
+          if (-not $pkg) { throw "no .nupkg found in _dist" }
+          Write-Host "pushing $pkg"
+          dotnet nuget push $pkg `
+            --api-key ${{ steps.login.outputs.NUGET_API_KEY }} `
+            --source https://api.nuget.org/v3/index.json `
+            --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { throw "dotnet nuget push failed" }
