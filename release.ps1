@@ -100,14 +100,27 @@ foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/index
 # ---------------------------------------------------------------- optional install ----------------
 if ($Install) {
   Step 'Refresh the local installs'
-  & (Join-Path $root 'xrmtoolbox\install.ps1')
+  # The two hosts are independent: XrmToolBox holding its dll open must not stop ToolBox being
+  # refreshed. install.ps1 sets ErrorActionPreference Stop, so isolate it.
+  try {
+    & (Join-Path $root 'xrmtoolbox\install.ps1')
+    Ok 'XrmToolBox refreshed'
+  } catch {
+    Write-Host '   --   XrmToolBox is open, so its dll is locked - close it and re-run to update that host' -ForegroundColor Yellow
+  }
   $pptbTool = Get-ChildItem (Join-Path $env:APPDATA 'powerplatform-toolbox\tools') -Directory -ErrorAction SilentlyContinue |
               Where-Object { Test-Path (Join-Path $_.FullName 'dist\index.html') } |
               Where-Object { (Get-Content (Join-Path $_.FullName 'package.json') -Raw) -match 'user-security-role-table-access' }
   if ($pptbTool) {
-    Copy-Item "$root\pptb\dist\index.html" (Join-Path $pptbTool.FullName 'dist') -Force
-    Copy-Item "$root\pptb\package.json"    $pptbTool.FullName -Force
-    Ok "Power Platform ToolBox refreshed ($($pptbTool.Name))"
+    foreach ($f in 'dist\index.html','dist\icon.svg','package.json','README.md','LICENSE','npm-shrinkwrap.json') {
+      Copy-Item (Join-Path "$root\pptb" $f) (Join-Path $pptbTool.FullName $f) -Force
+    }
+    # ToolBox shows the version from its manifest, not from package.json
+    $mf = Join-Path $env:APPDATA 'powerplatform-toolbox\tools\manifest.json'
+    $txt = [IO.File]::ReadAllText($mf) -replace
+      ('("id":\s*"' + $pptbTool.Name + '",\s*"name":[^,]+,\s*"version":\s*")[0-9.]+(")'), ('${1}' + $v.pptb + '${2}')
+    [IO.File]::WriteAllText($mf, $txt, (New-Object Text.UTF8Encoding $false))
+    Ok "Power Platform ToolBox refreshed to $($v.pptb)"
   } else { Write-Host '   --   not installed in Power Platform ToolBox; skipped' -ForegroundColor DarkGray }
 }
 
