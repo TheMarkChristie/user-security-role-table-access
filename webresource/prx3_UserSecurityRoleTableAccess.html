@@ -568,7 +568,7 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
 "use strict";
 
 /* ================================ constants ================================ */
-var APP_VERSION = "1.0.1";
+var APP_VERSION = "1.0.2";
 var API_VER     = "v9.2";
 var SYSADMIN_TEMPLATE = "627090ff-40a3-4053-8790-584edc5be201"; // constant in every environment
 
@@ -882,6 +882,17 @@ function makeApi(conn){
       }
     }
   }
+  // Fallback for reading a role's privileges without RetrieveRolePrivilegesRole. Depth here is
+  // privilegedepthmask - a BITMASK (1/2/4/8), a different encoding from the enum name the function
+  // returns, so the rows flag themselves and loadRolePrivs decodes accordingly.
+  async function rolePrivilegesViaIntersect(roleId){
+    var rows = await getAll("roleprivilegescollection?$select=privilegeid,privilegedepthmask" +
+                            "&$filter=roleid eq " + roleId + "&$orderby=roleprivilegeid asc", null, 5000);
+    return {RolePrivileges: rows.map(function(r){
+      return {PrivilegeId: r.privilegeid, Depth: r.privilegedepthmask, _fromMask: true};
+    })};
+  }
+
   return {
     root:root, get:get, getAll:getAll, getAllTolerant:getAllTolerant,
 
@@ -908,9 +919,18 @@ function makeApi(conn){
 
     // UNBOUND function: bare name, no Microsoft.Dynamics.CRM. prefix, unquoted GUID.
     rolePrivileges:async function(roleId){
-      if(PPTB) return await window.dataverseAPI.execute({operationName:"RetrieveRolePrivilegesRole",
-                        operationType:"function", parameters:{RoleId:roleId}});
-      return await get("RetrieveRolePrivilegesRole(RoleId="+roleId+")");
+      // The intersect fallback applies in EVERY host, not just ToolBox: the function is the nicer
+      // call (depth as a name, no mask decoding) but it is not the only way, and a role we cannot read
+      // leaves a hole in the grid that looks exactly like "no access".
+      try{
+        if(PPTB) return await window.dataverseAPI.execute({operationName:"RetrieveRolePrivilegesRole",
+                              operationType:"function", parameters:{RoleId:roleId}});
+        return await get("RetrieveRolePrivilegesRole(RoleId="+roleId+")");
+      }catch(e){
+        var viaIntersect = await rolePrivilegesViaIntersect(roleId);
+        viaIntersect._fellBackFrom = e;      // keep the original error so the fallback is not silent
+        return viaIntersect;
+      }
     },
 
     // Roles assigned DIRECTLY to a user. PPTB has no way to walk a navigation property, so use
@@ -1132,7 +1152,7 @@ async function loadOrg(){
       return "roles?$select="+cols.join(",")+"&$filter=componentstate eq 0&$orderby=name asc,roleid asc";
     },
     ["roleid","name","_businessunitid_value","_parentrootroleid_value"],
-    ["isautoassigned","_roletemplateid_value","isinherited","ismanaged"], 5000);
+    ["isautoassigned","ismanaged","appliesto","_roletemplateid_value","isinherited"], 5000);
   // getAllTolerant drops optional columns on a 400; if isautoassigned went, the licence-role
   // protection is silently off, so Mirror mode must be withdrawn rather than quietly misbehave.
   // The Web API omits null-valued properties, so a single sample row proves nothing — look for the
@@ -1266,6 +1286,15 @@ function teamEditable(t){
     return "This environment did not return the team's systemmanaged column, so the tool cannot tell whether this access team is system-managed.";
   return null;                      // owner teams and user-created access teams are fine
 }
+/* "Sales Enterprise app access" and its siblings exist to license an app, not to grant data access -
+   Microsoft: "No data access permission is granted to this role". So failing to read one cannot change
+   any cell in the table grid, and warning as though the grid were unreliable is alarming for nothing.
+   Tested on the columns rather than the name: a customer's clone of one would not be auto-assigned. */
+function isAppAccessRole(r){
+  if(!r) return false;
+  if(!S.rolesHaveAutoAssigned) return false;      // cannot tell; fall back to the loud warning
+  return isAutoAssigned(r) && r.ismanaged === true && !!r.appliesto;
+}
 function isSysAdmin(u){
   return effectiveRoles(u).some(function(r){
     var role = S.rolesById[r.roleId];
@@ -1329,21 +1358,31 @@ async function loadMeta(){
 async function loadRolePrivs(roleId){
   roleId = lower(roleId);
   if(S.rolePrivs[roleId]) return S.rolePrivs[roleId];
-  var entry = {byPriv:{}, count:0, error:null};
+  var entry = {byPriv:{}, count:0, error:null, viaFallback:false};
   try{
     // Depth comes back as the enum NAME, which avoids the undocumented privilegedepthmask integers.
     var r = await S.api.rolePrivileges(roleId);
+    if(r && r._fellBackFrom){
+      entry.viaFallback = true;
+      if(window.console) console.warn("RetrieveRolePrivilegesRole failed for role " + roleId +
+        "; read the intersect instead.", r._fellBackFrom);
+    }
     (r && r.RolePrivileges || []).forEach(function(rp){
       var d = rp.Depth;
-      // A numeric Depth here is the PrivilegeDepth ENUM (0-4) - NOT privilegedepthmask (1/2/4/8).
-      // Reading it with the mask table would shift every level by a power of two.
-      if(typeof d === "number") d = DEPTH_ENUM[d] || MASK_DEPTH[d] || String(d);
+      // Two different encodings, and which one this is depends on where it came from. The function
+      // returns the PrivilegeDepth ENUM (0-4) as a name; the intersect fallback returns the
+      // privilegedepthmask BITMASK (1/2/4/8). Reading one with the other's table shifts every level
+      // by a power of two, so the fallback flags itself rather than leaving it to be guessed.
+      if(typeof d === "number") d = rp._fromMask ? (MASK_DEPTH[d] || String(d))
+                                                 : (DEPTH_ENUM[d] || MASK_DEPTH[d] || String(d));
       entry.byPriv[lower(rp.PrivilegeId)] = d;
       entry.count++;
     });
   }catch(e){
     // a transient 401/429 must not poison the cache for the rest of the session
-    entry.error = e.message || String(e);
+    entry.error = e;
+    if(window.console) console.warn("Could not read privileges for role " + roleId,
+      {status:e && e.status, code:e && e.code, detail:e && e.detail, message:e && e.message});
     return entry;
   }
   S.rolePrivs[roleId] = entry;
@@ -1712,9 +1751,9 @@ async function refreshCols(){
 
   if(res.failed.length)
     head.appendChild(el("div",{class:"bar error"},[
-      el("b",{text:"Could not read " + res.failed.length + " profile(s): " +
-        res.failed.map(function(f){ return f.profile.name; }).join(", ")}),
-      document.createTextNode(" Reading column permissions needs the Read privilege on the Field Permission table, which in practice means an administrator. The grid below is incomplete.")]));
+      el("b",{text:"Could not read " + res.failed.length + " column security profile(s), so the grid below is incomplete."}),
+      document.createTextNode(" " + res.failed.map(function(f){
+        return f.profile.name + ": " + friendlyError(f.error); }).join("  "))]));
 
   $("tcCols").textContent = "(" + res.rows.filter(function(r){ return r.any; }).length + ")";
   renderCols();
@@ -2105,10 +2144,31 @@ async function refreshPerms(){
         " Reading it needs the Read privilege on Field Permission, which in practice means an administrator.")]));
 
   if(S.permRows.failed.length)
-    head.appendChild(el("div",{class:"bar error"},[
-      el("b",{text:"Could not read "+S.permRows.failed.length+" role(s)."}),
-      document.createTextNode(S.permRows.failed.map(function(f){ return (f.role&&f.role.name)||"?"; }).join(", ")+
-        " — reading role privileges needs access to the Privilege table. The grid below is incomplete.")]));
+    head.appendChild((function(){
+      // An app-access role grants no data access, so an unread one cannot affect the grid. Separating
+      // the two stops a harmless licensing role from making the whole answer look untrustworthy.
+      var harmless = S.permRows.failed.filter(function(f){ return isAppAccessRole(f.role); });
+      var real     = S.permRows.failed.filter(function(f){ return !isAppAccessRole(f.role); });
+      var box = el("div",{class: real.length ? "bar error" : "bar"});
+
+      if(real.length){
+        box.appendChild(el("b",{text:"Could not read the privileges of " + real.length +
+          " role(s), so the grid below is incomplete — a blank cell may mean “unknown” rather than “no access”."}));
+        // Say what Dataverse actually returned rather than guessing at the cause.
+        real.forEach(function(f){
+          box.appendChild(el("div",{style:"margin-top:4px"},[
+            el("strong",{text:((f.role && f.role.name) || "?") + ": "}),
+            document.createTextNode(friendlyError(f.error))]));
+        });
+      }
+      if(harmless.length){
+        box.appendChild(el("div",{style: real.length ? "margin-top:8px" : null},[
+          el("b",{text:harmless.map(function(f){ return f.role.name; }).join(", ") +
+            " could not be read, but it does not affect this grid. "}),
+          document.createTextNode("App access roles license an app rather than granting data access, so they contribute no table privileges.")]));
+      }
+      return box;
+    })());
 
   var entra = u._teams.map(function(t){ return S.teamsById[t]; })
                       .filter(function(t){ return t && (t.teamtype===2||t.teamtype===3); });
