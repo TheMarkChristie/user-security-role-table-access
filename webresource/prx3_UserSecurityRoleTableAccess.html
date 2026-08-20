@@ -568,7 +568,7 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
 "use strict";
 
 /* ================================ constants ================================ */
-var APP_VERSION = "1.0.2";
+var APP_VERSION = "1.0.3";
 var API_VER     = "v9.2";
 var SYSADMIN_TEMPLATE = "627090ff-40a3-4053-8790-584edc5be201"; // constant in every environment
 
@@ -695,15 +695,21 @@ var EMDASH = "\u2014";
 // Loads nest (a permission fold triggers a metadata load triggers a column-security load), so count
 // depth: the first bootDone of an inner load must not hide the spinner the outer one is still using.
 var _bootDepth = 0;
+// boot() only UPDATES the message - it is called once per progress tick, so counting it as a new
+// nesting level made the depth climb far past the number of bootDone() calls and the spinner never
+// went away. Depth tracks loads in flight, opened by bootBegin() and closed by bootDone().
 function boot(main,sub){
   var b=$("boot"); if(!b) return;
-  _bootDepth++;
   show(b,true); $("bootMain").textContent=main||""; $("bootSub").textContent=sub||"";
 }
+function bootBegin(main,sub){ _bootDepth++; boot(main,sub); }
 function bootDone(){
   _bootDepth = Math.max(0, _bootDepth - 1);
   if(_bootDepth === 0) show($("boot"),false);
 }
+// Last resort: however the counting goes, the spinner must not outlive the work. Anything that ends a
+// user-visible operation calls this, so a leaked scope cannot strand it on screen.
+function bootIdle(){ _bootDepth = 0; show($("boot"),false); }
 function bootReset(){ _bootDepth = 0; show($("boot"),false); }
 function banner(host,kind,title,detail){
   var h = typeof host==="string" ? $(host) : host;
@@ -1133,7 +1139,7 @@ function classify(u){
 async function loadOrg(){
   var api = S.api;
 
-  boot("Reading the organisation", "who am I");
+  bootBegin("Reading the organisation", "who am I");
   S.me = await api.whoAmI();
   S.meId = lower(S.me && (S.me.UserId || S.me.userId));
   // Without this the "you are changing your own account" confirmation can never fire, so say so loudly
@@ -1307,7 +1313,7 @@ async function loadMeta(){
   if(S.meta) return S.meta;
   if(S.metaLoading) return S.metaLoading;
   S.metaLoading = (async function(){
-    boot("Loading table metadata", "privileges for every table — this is the big one");
+    bootBegin("Loading table metadata", "privileges for every table — this is the big one");
     var lcid = await uiLanguage();
 
     var res = await S.api.tablePrivileges(lcid);
@@ -1394,7 +1400,7 @@ async function computePermissions(u){
   var meta = await loadMeta();
   var roles = effectiveRoles(u);
 
-  boot("Reading role privileges", roles.length + " role(s)");
+  bootBegin("Reading role privileges", roles.length + " role(s)");
   // Take the results from mapLimit rather than re-reading S.rolePrivs: a failed read is deliberately
   // NOT cached (so it can be retried), which would otherwise make the failure invisible here.
   var loaded = await mapLimit(roles, 4, function(r){ return loadRolePrivs(r.roleId); },
@@ -1475,7 +1481,7 @@ async function loadSecuredColumns(){
   if(S.secured) return S.secured;
   if(S.securedLoading) return S.securedLoading;
   S.securedLoading = (async function(){
-    boot("Looking for secured columns", "column-level security metadata");
+    bootBegin("Looking for secured columns", "column-level security metadata");
     var res = PPTB ? await S.api.securedColumnsViaProfile()
                    : await S.api.securedColumns(await uiLanguage());
     // A malformed response must NOT collapse to "nothing is secured" - that is an affirmative
@@ -1580,6 +1586,7 @@ async function computeColumnAccess(u){
   var profiles = await userSecurityProfiles(u);
   var admin    = isSysAdmin(u);
 
+  bootBegin("Reading column security profiles", profiles.length + " profile(s)");
   var loaded = await mapLimit(profiles, 4, function(pr){ return loadProfilePerms(pr.id); },
                               function(d,n){ boot("Reading column security profiles", d+" / "+n); });
   bootDone();
@@ -1701,6 +1708,7 @@ async function refreshCols(){
     return;
   }
   if(run !== _colRun) return;
+  bootIdle();
   S.colUser = u; S.colRows = res;
   // no cache write here: columnAccessFor already stored it if - and only if - the answer was complete.
   // Writing again unconditionally would freeze a partial result for the rest of the session.
@@ -2102,6 +2110,7 @@ async function refreshPerms(){
     return;
   }
   if(run !== _permRun) return;          // the operator moved on; discard this result
+  bootIdle();
   S.permUser = u;
   S.permRows = rows;
 
@@ -3251,6 +3260,7 @@ async function start(){
       "Security Role, Team and Privilege tables — a System Administrator or System Customizer normally has it.");
     return;
   }
+  bootIdle();          // the load is over; the spinner goes, whatever the scope count says
   buildFilters();
   applyCapabilityLimits();
   syncOpUi();
@@ -3289,7 +3299,7 @@ async function init(){
   }
   wire();
   if(!S.conn.ready){
-    bootDone();
+    bootReset();          // the spinner is in the markup, so there is no scope to pop here
     paintConn();
     if(S.conn.hint) banner("globalMsg","warn","No access token for this connection.", " "+S.conn.hint);
     if(S.conn.baseUrl) $("inUrl").value = S.conn.baseUrl;

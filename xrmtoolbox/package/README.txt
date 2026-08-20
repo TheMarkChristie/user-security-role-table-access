@@ -1,5 +1,5 @@
 ================================================================================
-  USER SECURITY ROLE TABLE ACCESS  v1.0.2  --  a tool for XrmToolBox
+  USER SECURITY ROLE TABLE ACCESS  v1.0.3  --  a tool for XrmToolBox
   by Mark Christie   https://github.com/TheMarkChristie
 ================================================================================
 
