@@ -1,4 +1,4 @@
-# Deploying v1.0.0
+# Deploying
 
 Everything is built and verified. What is left needs credentials, so it is yours to run.
 
@@ -55,7 +55,7 @@ The workflow file name is part of the trust — renaming it breaks the policy. T
 GitHub release, or run the workflow by hand with **Dry run** unticked:
 
 ```powershell
-gh release create v1.0.0 --title "v1.0.0" --notes-file - < DEPLOY-notes.md
+gh release create v<version> --generate-notes
 # or, to test the build without pushing:
 gh workflow run publish-nuget.yml -f dryRun=true
 ```
@@ -71,7 +71,7 @@ repository fields). Scope it Push → *Push new packages and package versions*, 
 ```powershell
 cd V:\PCF\UserSecurityRoleTableAccess
 .\release.ps1
-nuget push _dist\MarkChristie.UserSecurityRoleTableAccess.1.0.0.nupkg `
+nuget push _dist\MarkChristie.UserSecurityRoleTableAccess.<version>.nupkg `
   -ApiKey <YOUR_NUGET_KEY> -Source https://api.nuget.org/v3/index.json
 ```
 
@@ -121,7 +121,7 @@ declares.
   cleanly: delete the tool's folder under `%APPDATA%\powerplatform-toolbox\tools\` and its entry in
   `manifest.json` (a `manifest.json.bak-*` from the hand-install sits beside it).
 - XrmToolBox will offer the Tool Library version as an update over the locally installed DLL.
-- `_dist\UserSecurityRoleTableAccess-1.0.0.zip` stays useful regardless — it is the copy to send anyone
+- `_dist\UserSecurityRoleTableAccess-<version>.zip` stays useful regardless — it is the copy to send anyone
   who wants the tool without going through either library.
 
 ## Releasing a later version

@@ -127,100 +127,60 @@ sharing, access-team sharing, manager or position hierarchy security, or team-ow
 than pretending the grids constrain them. For the truth about one specific record, use that record's
 **Check Access** in the app.
 
-## Hosts
+## Where it runs
 
-One HTML file runs in three places and themes itself to match:
+The same tool runs in three places and themes itself to match each one:
 
-| Host | Detected by | Theme |
-| --- | --- | --- |
-| Power Platform ToolBox | `window.dataverseAPI` | Dark |
-| XrmToolBox | `window.XTB_CONFIG` | Windows 95 |
-| Dynamics 365 web resource | `Xrm` / same origin | Light |
-
-`webresource/prx3_UserSecurityRoleTableAccess.html` is the single source of truth. The other two builds are
-copies — there is no separate skinned version to drift out of sync.
-
-## Install
-
-### XrmToolBox
-
-Build and install locally:
-
-```powershell
-cd V:\PCF\UserSecurityRoleTableAccess\xrmtoolbox\UserSecurityRoleTableAccess
-dotnet build -c Release
-..\install.cmd
-```
-
-`install.cmd` wraps `install.ps1` with `-ExecutionPolicy Bypass`, so it also works from Explorer. It copies
-only `UserSecurityRoleTableAccess.dll` and `app\index.html` into `%APPDATA%\MscrmTools\XrmToolBox\Plugins` —
-XrmToolBox already ships WebView2 and the Dataverse SDK, and shipping our own copies would clash with
-other tools. To uninstall, delete those two files.
-
-**Restart XrmToolBox**, then open **User Access Explorer**. Plugins are discovered at startup, so a
-running instance will not see it until it restarts.
-
-The plugin is a thin WebView2 host: it pushes the active connection's org URL and OAuth token into the page
-as `window.XTB_CONFIG`, so use an **OAuth/MFA connection** — a connection type XrmToolBox cannot mint a
-token for will land you on the manual token panel instead.
-
-#### Giving it to other people
-
-`node xrmtoolbox\build-zip.js` (after a Release build) produces
-`_dist\UserSecurityRoleTableAccess-<version>.zip` — a self-contained drop for anyone who wants the tool without
-going through the Tool Library. It holds `Install.cmd` / `Uninstall.cmd`, a plain-English `README.txt`, and
-a `Plugins\` folder that mirrors the destination so a manual drag-and-drop install is obvious. The
-installer finds the Plugins folder itself, refuses politely if XrmToolBox is running, skips files that are
-already identical, and clears the mark-of-the-web that Windows puts on anything downloaded — without which
-.NET can refuse to load the assembly.
-
-To publish to the Tool Library instead, see [PUBLISHING.md](PUBLISHING.md).
-
-### Power Platform ToolBox
-
-```powershell
-cd V:\PCF\UserSecurityRoleTableAccess\pptb
-npm run build
-npx @pptb/validate
-```
-
-Load `dist/` through the ToolBox Debug Menu, or publish to npm and the Tool Registry — again, see
-[PUBLISHING.md](PUBLISHING.md).
-
-### Dynamics 365 web resource
-
-Deploy `webresource/prx3_UserSecurityRoleTableAccess.html` as an HTML web resource named
-`prx3_UserSecurityRoleTableAccess.html` and surface it from a dashboard or the sitemap. It runs as the signed-in
-user, so it is security-trimmed by whoever opens it.
-
-## Permissions the tool itself needs
-
-Reading requires read access to the **System User**, **Security Role**, **Team**, **Business Unit** and
-**Privilege** tables. The Column security tab additionally needs Read on **Field Permission** and **Field
-Security Profile** — in practice an administrator. Without it the tool says the profile could not be read,
-rather than quietly reporting the user as having no access. Copying roles additionally requires the **Assign** privilege on Security Role, and
-Dataverse will refuse to let you assign a role containing privileges you do not hold yourself
-(`0x80048d3b`) — the tool surfaces the list of missing privileges verbatim when that happens. A System
-Administrator has everything it needs.
-
-## Layout
-
-| Path | What it is |
+| Host | Theme |
 | --- | --- |
-| `webresource/prx3_UserSecurityRoleTableAccess.html` | The whole application — single source of truth |
-| `xrmtoolbox/UserSecurityRoleTableAccess/` | WebView2 plugin host (.NET 4.8), nuspec, icons |
-| `xrmtoolbox/build-app.js` | Copies the app into the plugin output |
-| `xrmtoolbox/build-zip.js` | Builds the redistributable ZIP into `_dist/` |
-| `xrmtoolbox/package/` | Installer, uninstaller and README that go inside that ZIP |
-| `xrmtoolbox/install.cmd` / `install.ps1` | Local install into the XrmToolBox Plugins folder |
-| `pptb/` | Power Platform ToolBox manifest and build |
-| `docs/ARCHITECTURE.md` | How the permission computation and role copy work |
-| `release.ps1` | Rebuilds and verifies every artefact; run before publishing |
-| `DEPLOY.md` | The deploy runbook — what to run, in what order, and what blocks what |
-| `PUBLISHING.md` | Reference detail behind those steps |
-| `xrmtoolbox/gen-icondata.ps1` | Regenerates the icon PNGs and `IconData.cs` from `icon.svg` |
-| `icon.svg` | The one source icon — everything else (`icon.png`, `icon32/80.png`, the PPTB SVG, the inline header mark) derives from it |
-| `_dist/` | Built release artefacts: the hand-install ZIP and the NuGet package |
+| Power Platform ToolBox | Dark |
+| XrmToolBox | Windows 95 |
+| Dynamics 365 web resource | Light |
+
+## Installing
+
+**Power Platform ToolBox** — find **User Access Explorer** in the Tool Library and install it.
+
+**XrmToolBox** — find **User Access Explorer** in the Tool Library and install it, then restart
+XrmToolBox. Plugins are discovered at startup, so a running instance will not see it until it restarts.
+
+Connect with an **OAuth / MFA connection**. The plugin passes that connection's access token to the tool,
+which is how it reaches the Dataverse Web API. If XrmToolBox cannot produce a token for your connection
+type, the tool tells you and offers a box to paste one into rather than failing silently.
+
+**Dynamics 365** — the tool can also run inside a model-driven app as an HTML web resource, surfaced from
+a dashboard or the sitemap. It runs as the signed-in user, so it is security-trimmed by whoever opens it.
+
+## Permissions you need
+
+**Reading** requires read access to the **System User**, **Security Role**, **Team**, **Business Unit** and
+**Privilege** tables. The Column security tab additionally needs Read on **Field Permission** and **Field
+Security Profile**. Without those, the tool tells you what it could not read rather than quietly reporting
+a user as having no access — for an access-audit tool, "cannot read" and "has no access" must never look
+the same.
+
+**Changing** roles, profiles, team membership or business units needs write access on top of that, and the
+**Assign** privilege on Security Role. Dataverse will not let you assign a role containing privileges you
+do not hold yourself (`0x80048d3b`); when that happens the tool shows you exactly which privileges you are
+missing.
+
+A **System Administrator** has everything it needs. With anything less, expect parts of the tool to report
+what they could not see.
+
+## A word on the write features
+
+Copying roles, profiles, teams and especially **business units** changes real access, and there is no undo.
+Read the preview line by line and start with one user before doing anything in bulk.
+
+Moving a business unit is the one to watch: Dataverse removes *every* security role the user has. The tool
+captures them first and re-applies the equivalents in the new unit immediately afterwards, and refuses
+outright to make a change that would leave anyone with no role at all — because a user with no role cannot
+sign in. But if one of their roles has no counterpart in the destination, they come out with less than they
+went in with. The preview tells you which, before you commit to it.
+
+## Building from source
+
+See [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
 ## Licence
 
