@@ -14,7 +14,7 @@
     <Product>User Access Explorer</Product>
     <Company>Mark Christie</Company>
     <Authors>Mark Christie</Authors>
-    <Version>1.0.6</Version>
+    <Version>1.0.7</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,8 +28,9 @@
   <!-- Copy the canonical single-file app into app/user-access-explorer.html before each build.
        The name must stay unique: every plugin dll lands flat in Plugins\, so every
        WebView2 tool maps its virtual host onto the SAME Plugins/app folder.
-       The HTML self-themes to Windows 95 at runtime via body[data-host="xtb"],
-       so there is no separate skinning step to drift out of sync. -->
+       The HTML self-themes at runtime via body[data-host="xtb"] (Fluent 2 light,
+       the same palette as the web resource), so there is no separate skinning
+       step to drift out of sync. -->
   <Target Name="BuildApp" BeforeTargets="BeforeBuild">
     <Exec Command="node &quot;$(MSBuildProjectDirectory)/../build-app.js&quot;" ContinueOnError="true" />
   </Target>

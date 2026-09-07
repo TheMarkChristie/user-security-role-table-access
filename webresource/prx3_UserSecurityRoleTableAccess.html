@@ -15,7 +15,7 @@
 
   ONE FILE, THREE HOSTS. The host is detected at runtime and body[data-host] is set:
     pptb  Power Platform ToolBox   window.dataverseAPI   (dark theme)
-    xtb   XrmToolBox WebView2      window.XTB_CONFIG     (Windows 95 theme)
+    xtb   XrmToolBox WebView2      window.XTB_CONFIG     (Fluent 2 light theme)
     web   D365 web resource        Xrm / same-origin     (light theme)
 
   API NOTES (verified against Microsoft Learn + a live org, Aug 2026) — see docs/ARCHITECTURE.md:
@@ -32,258 +32,428 @@
 -->
 <style>
 /* ============================================================================
-   One stylesheet, three hosts. Every colour, radius, border and font is a token;
-   the three host palettes rebind the tokens and the layout below never changes.
-   Every palette is checked for WCAG 2.1 AA contrast, and permission depth is
-   never encoded by colour alone — each cell carries a letter and a label.
+   Fluent 2 — one stylesheet, three hosts.
+
+   The token VALUES below are lifted verbatim from @fluentui/react-theme
+   (webLightTheme / webDarkTheme), and the names match the Fluent token names,
+   so this renders like a modern model-driven app without shipping React.
+
+     data-host="web"   D365 web resource / standalone   -> Fluent LIGHT
+     data-host="xtb"   XrmToolBox (WebView2 plugin)     -> Fluent LIGHT
+     data-host="pptb"  Power Platform ToolBox           -> Fluent DARK
+
+   Light is the base; the dark host re-declares the colour tokens only, so the
+   layout below never changes per host. Every foreground/background pair used
+   for text clears WCAG 2.1 AA in both themes, and permission depth is never
+   encoded by colour alone — each cell carries a letter and a label.
    ============================================================================ */
 
-/* ---------- light (default: D365 web resource / standalone) ---------- */
-:root{
-  color-scheme:light;
-  --bg:#faf9f8; --card:#fff; --card2:#f3f2f1; --line:#e1dfdd; --line2:#edebe9;
-  --ink:#201f1e; --ink2:#56545a; --ink3:#6e6c6a;
-  --brand:#0f6cbd; --brand-ink:#fff; --brand-hover:#115ea3; --brand-soft:#eff6fc;
-  --ok:#0e6b0e; --ok-bg:#e8f5e8; --ok-line:#9fd89f;
-  --warn:#7a4d05; --warn-bg:#fff4ce; --warn-line:#f2c661;
-  --danger:#a4262c; --danger-bg:#fdf3f4; --danger-line:#f1bbbc;
-  --info-bg:#eff6fc; --info-line:#b4d6fa;
-  --field-bg:#fff; --field-ink:#201f1e; --field-border:1px solid #8a8886;
-  --btn-bg:#fff; --btn-ink:#201f1e; --btn-border:1px solid #8a8886; --btn-hover:#f3f2f1; --btn-active:#edebe9;
-  --th-bg:#f3f2f1; --row-hover:#f3f9fd; --row-sel:#dceefb; --row-sel-ink:#201f1e; --row-zebra:#fbfbfa;
-  --radius:6px; --radius-sm:4px; --radius-pill:999px;
-  --font:"Segoe UI",-apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;
-  --font-mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
-  --shadow:0 1.6px 3.6px rgba(0,0,0,.12),0 .3px .9px rgba(0,0,0,.1);
-  --focus:#0f6cbd; --titlebar-bg:transparent; --titlebar-ink:#201f1e; --bevel:none;
-  --d1-bg:#dceefb; --d1-ink:#0b3d66; --d2-bg:#9ecdf5; --d2-ink:#0b3d66;
-  --d3-bg:#4a9ee8; --d3-ink:#04223a; --d4-bg:#0f6cbd; --d4-ink:#fff;
-  --df-bg:#fff4ce; --df-ink:#5c3a04; --d0-ink:#56545a;
-}
-/* ---------- dark (Power Platform ToolBox opens dark) ---------- */
-body[data-host="pptb"]{
-  color-scheme:dark;
-  --bg:#1b1a19; --card:#252423; --card2:#2f2e2d; --line:#3b3a39; --line2:#323130;
-  --ink:#f3f2f1; --ink2:#b3b0ad; --ink3:#a19f9d;
-  --brand:#479ef5; --brand-ink:#06243d; --brand-hover:#62aef7; --brand-soft:#10243a;
-  --ok:#92e892; --ok-bg:#123312; --ok-line:#2c6e2c;
-  --warn:#ffd279; --warn-bg:#3a2f10; --warn-line:#7a6220;
-  --danger:#ff909a; --danger-bg:#3a1d20; --danger-line:#7d3b41;
-  --info-bg:#102a3f; --info-line:#23456a;
-  --field-bg:#1f1e1d; --field-ink:#f3f2f1; --field-border:1px solid #605e5c;
-  --btn-bg:#2f2e2d; --btn-ink:#f3f2f1; --btn-border:1px solid #605e5c; --btn-hover:#3b3a39; --btn-active:#444341;
-  --th-bg:#2f2e2d; --row-hover:#2c3a48; --row-sel:#10314f; --row-sel-ink:#f3f2f1; --row-zebra:#222120;
-  --shadow:0 1.6px 3.6px rgba(0,0,0,.4),0 .3px .9px rgba(0,0,0,.3); --focus:#479ef5;
-  /* var() in a custom property resolves where it is DECLARED, so every palette must restate these */
-  --titlebar-bg:transparent; --titlebar-ink:#f3f2f1; --bevel:none;
-  --d1-bg:#10314f; --d1-ink:#cfe4fa; --d2-bg:#1c517f; --d2-ink:#e6f2fd;
-  --d3-bg:#2a72b0; --d3-ink:#ffffff; --d4-bg:#62aef7; --d4-ink:#04223a;
-  --df-bg:#3a2f10; --df-ink:#ffd279; --d0-ink:#b3b0ad;
-}
-/* ---------- Windows 95 (XrmToolBox) ---------- */
+/* ---------- Fluent 2 light: the base (D365 web resource + XrmToolBox) ---------- */
+:root,
+body[data-host="web"],
 body[data-host="xtb"]{
   color-scheme:light;
-  --bg:#008080; --card:#c0c0c0; --card2:#c0c0c0; --line:#808080; --line2:#dfdfdf;
-  --ink:#000; --ink2:#303030; --ink3:#404040;
-  --brand:#000080; --brand-ink:#fff; --brand-hover:#1084d0; --brand-soft:#d8d8f0;
-  --ok:#006000; --ok-bg:#dfffdf; --ok-line:#008000;
-  --warn:#6b5600; --warn-bg:#fcfca8; --warn-line:#808000;
-  --danger:#800000; --danger-bg:#ffdede; --danger-line:#a00000;
-  --info-bg:#fff; --info-line:#808080;
-  --field-bg:#fff; --field-ink:#000; --field-border:2px inset #c0c0c0;
-  --btn-bg:#c0c0c0; --btn-ink:#000; --btn-border:2px outset #c0c0c0; --btn-hover:#c8c8c8; --btn-active:#c0c0c0;
-  --th-bg:#c0c0c0; --row-hover:#e8e8e8; --row-sel:#000080; --row-sel-ink:#fff; --row-zebra:#f4f4f4;
-  --radius:0px; --radius-sm:0px; --radius-pill:0px;
-  --font:"MS Sans Serif",Tahoma,"Segoe UI",sans-serif; --font-mono:"Courier New",monospace;
-  --shadow:2px 2px 0 rgba(0,0,0,.35); --focus:#000;
-  --titlebar-bg:#000080; --titlebar-ink:#fff; --bevel:2px outset #c0c0c0;
-  --d1-bg:#d8d8f0; --d1-ink:#000; --d2-bg:#a8a8e0; --d2-ink:#000;
-  --d3-bg:#5a5ac0; --d3-ink:#fff; --d4-bg:#000080; --d4-ink:#fff;
-  --df-bg:#fcfca8; --df-ink:#000; --d0-ink:#303030;
+
+  --colorNeutralBackground1:          #ffffff;
+  --colorNeutralBackground1Hover:     #f5f5f5;
+  --colorNeutralBackground2:          #fafafa;
+  --colorNeutralBackground3:          #f5f5f5;
+  --colorNeutralBackground4:          #f0f0f0;
+  --colorNeutralBackgroundDisabled:   #f0f0f0;
+  --colorSubtleBackgroundHover:       #f5f5f5;
+
+  --colorNeutralForeground1:          #242424;  /* 15.5:1 on bg1 */
+  --colorNeutralForeground2:          #424242;  /* 10.1:1        */
+  --colorNeutralForeground3:          #616161;  /*  6.2:1        */
+  --colorNeutralForegroundDisabled:   #bdbdbd;
+  --colorNeutralForegroundOnBrand:    #ffffff;
+
+  --colorNeutralStroke1:              #d1d1d1;
+  --colorNeutralStroke2:              #e0e0e0;
+  --colorNeutralStrokeAccessible:     #616161;
+
+  --colorBrandBackground:             #0f6cbd;  /* white on it: 5.4:1 */
+  --colorBrandBackgroundHover:        #115ea3;
+  --colorBrandBackgroundPressed:      #0c3b5e;
+  --colorBrandForeground1:            #0f6cbd;
+  --colorBrandForegroundLink:         #115ea3;
+  --colorBrandStroke1:                #0f6cbd;
+
+  --colorPaletteRedForeground1:       #bc2f32;  /*  5.9:1 */
+  --colorPaletteRedBackground1:       #fdf6f6;
+  --colorPaletteRedBorder1:           #f1bbbc;
+  --colorPaletteGreenForeground1:     #0e700e;  /*  6.3:1 */
+  --colorPaletteGreenBackground1:     #f1faf1;
+  --colorPaletteGreenBorder1:         #9fd89f;
+  --colorPaletteOrangeForeground1:    #c43501;  /*  5.4:1 */
+  --colorPaletteYellowBackground1:    #fffef5;
+
+  --colorStrokeFocus2:                #000000;
+  --colorBackgroundOverlay:           rgba(0,0,0,.4);
+
+  --shadow2:  0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+  --shadow4:  0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14);
+  --shadow8:  0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14);
+  --shadow16: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+}
+
+/* ---------- Fluent 2 dark: Power Platform ToolBox. Colours only. ---------- */
+body[data-host="pptb"]{
+  color-scheme:dark;
+
+  --colorNeutralBackground1:          #292929;
+  --colorNeutralBackground1Hover:     #3d3d3d;
+  --colorNeutralBackground2:          #1f1f1f;
+  --colorNeutralBackground3:          #141414;
+  --colorNeutralBackground4:          #0a0a0a;
+  --colorNeutralBackgroundDisabled:   #141414;
+  --colorSubtleBackgroundHover:       #383838;
+
+  --colorNeutralForeground1:          #ffffff;  /* 14.6:1 on bg1 */
+  --colorNeutralForeground2:          #d6d6d6;  /* 10.0:1        */
+  --colorNeutralForeground3:          #adadad;  /*  6.5:1        */
+  --colorNeutralForegroundDisabled:   #5c5c5c;
+  --colorNeutralForegroundOnBrand:    #ffffff;
+
+  --colorNeutralStroke1:              #666666;
+  --colorNeutralStroke2:              #525252;
+  --colorNeutralStrokeAccessible:     #adadad;
+
+  --colorBrandBackground:             #115ea3;  /* white on it: 6.7:1 */
+  --colorBrandBackgroundHover:        #0f6cbd;
+  --colorBrandBackgroundPressed:      #0c3b5e;
+  --colorBrandForeground1:            #479ef5;
+  --colorBrandForegroundLink:         #479ef5;
+  --colorBrandStroke1:                #479ef5;
+
+  --colorPaletteRedForeground1:       #e37d80;
+  --colorPaletteRedBackground1:       #3f1011;
+  --colorPaletteRedBorder1:           #d13438;
+  --colorPaletteGreenForeground1:     #54b054;
+  --colorPaletteGreenBackground1:     #052505;
+  --colorPaletteGreenBorder1:         #107c10;
+  --colorPaletteOrangeForeground1:    #e9835e;
+  --colorPaletteYellowBackground1:    #4c4400;
+
+  --colorStrokeFocus2:                #ffffff;
+  --colorBackgroundOverlay:           rgba(0,0,0,.5);
+
+  --shadow2:  0 0 2px rgba(0,0,0,.24), 0 1px 2px rgba(0,0,0,.28);
+  --shadow4:  0 0 2px rgba(0,0,0,.24), 0 2px 4px rgba(0,0,0,.28);
+  --shadow8:  0 0 2px rgba(0,0,0,.24), 0 4px 8px rgba(0,0,0,.28);
+  --shadow16: 0 0 2px rgba(0,0,0,.24), 0 8px 16px rgba(0,0,0,.28);
+}
+
+/* ---------- Shape, type, spacing and motion: identical in both themes ---------- */
+:root{
+  --borderRadiusSmall:  2px;
+  --borderRadiusMedium: 4px;
+  --borderRadiusLarge:  6px;
+  --borderRadiusXLarge: 8px;
+  --borderRadiusCircular: 10000px;
+
+  --fontFamilyBase: 'Segoe UI Variable Text', 'Segoe UI', 'Segoe UI Web (West European)',
+                    -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  --fontFamilyMonospace: Consolas, 'Courier New', Courier, monospace;
+
+  --fontSizeBase200: 12px;   /* caption  */
+  --fontSizeBase300: 14px;   /* body     */
+  --fontSizeBase400: 16px;   /* subtitle */
+  --fontSizeBase500: 20px;
+  --fontSizeBase600: 24px;
+  --lineHeightBase300: 20px;
+  --fontWeightRegular: 400;
+  --fontWeightSemibold: 600;
+
+  --spacingXS: 4px;
+  --spacingS:  8px;
+  --spacingM:  12px;
+  --spacingL:  16px;
+  --spacingXL: 24px;
+
+  --durationFaster: 100ms;
+  --durationNormal: 200ms;
+  --curveEasyEase: cubic-bezier(.33,0,.67,1);
+}
+
+/* ---------- the one tool-specific scale Fluent has no token for -------------
+   Access depth (User < Business unit < Parent:child < Organization) is an
+   ORDERED five-step scale and Fluent 2 ships no ordinal ramp token, so these
+   steps are taken from the genuine Fluent 2 brand ramp (@fluentui/tokens brand
+   ramp stops 20/30/40/50/60/70/80/100/130/140/150/160) rather than invented.
+   Selected grid rows reuse the lightest/darkest brand stop for the same reason
+   — webLightTheme's colorNeutralBackground1Selected is not in the house theme.
+   Every pair below was measured at >= 4.5:1; depth also carries a letter and a
+   title attribute, so it is never signalled by colour alone.
+   -------------------------------------------------------------------------- */
+:root,
+body[data-host="web"],
+body[data-host="xtb"]{
+  --depth1Background:#ebf3fc; --depth1Foreground:#0f548c;  /* brand 160 / 60   */
+  --depth2Background:#cfe4fa; --depth2Foreground:#0c3b5e;  /* brand 150 / 40   */
+  --depth3Background:#96c6fa; --depth3Foreground:#082338;  /* brand 130 / 20   */
+  --depth4Background:#0f6cbd; --depth4Foreground:#ffffff;  /* brand  80 / white*/
+  --colorRowSelected:#ebf3fc;                              /* brand 160        */
+}
+body[data-host="pptb"]{
+  --depth1Background:#0a2e4a; --depth1Foreground:#b4d6fa;  /* brand  30 / 140  */
+  --depth2Background:#0e4775; --depth2Foreground:#cfe4fa;  /* brand  50 / 150  */
+  --depth3Background:#115ea3; --depth3Foreground:#ffffff;  /* brand  70 / white*/
+  --depth4Background:#479ef5; --depth4Foreground:#061724;  /* brand 100 / 10   */
+  --colorRowSelected:#0a2e4a;                              /* brand  30        */
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+body{margin:0;background:var(--colorNeutralBackground2);color:var(--colorNeutralForeground1);
+  font-family:var(--fontFamilyBase);font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);
+  -webkit-font-smoothing:antialiased}
 .hidden{display:none !important}
-.wrap{max-width:1600px;margin:0 auto;padding:14px 16px 40px}
-body[data-host="xtb"] .wrap{max-width:none;padding:10px;background:var(--card);min-height:100%;
-  border:2px outset #c0c0c0}
+.wrap{max-width:1600px;margin:0 auto;padding:var(--spacingL) var(--spacingL) 40px}
+/* XrmToolBox docks the plugin in a panel, so it gets the full width. */
+body[data-host="xtb"] .wrap{max-width:none;padding:var(--spacingM) var(--spacingM) var(--spacingXL)}
 
-/* focus — never removed, always visible */
-:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-body[data-host="xtb"] :focus-visible{outline:2px dotted #000;outline-offset:1px}
+/* focus — a Fluent 2 focus stroke; never removed, only restyled */
+:focus-visible{outline:2px solid var(--colorStrokeFocus2);outline-offset:2px}
 
 /* header - one compact line; the hosts all show the connection themselves */
-header.app{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;
-  background:var(--titlebar-bg);border:var(--bevel);padding:0}
-body[data-host="xtb"] header.app{padding:3px 6px;margin-bottom:8px}
-h1{font-size:15.5px;font-weight:600;margin:0;color:var(--titlebar-ink);white-space:nowrap}
-body[data-host="xtb"] h1{font-size:12.5px;font-weight:bold}
-.byline{color:var(--ink2);font-size:11.5px;white-space:nowrap}
-.needsadmin{color:var(--warn);font-weight:600}
-body[data-host="xtb"] .needsadmin{color:#ffe680}
-body[data-host="xtb"] .byline{color:#dfdfff}
-.connline{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink2);
-  min-width:0;overflow:hidden;white-space:nowrap}
+header.app{display:flex;align-items:center;gap:var(--spacingS);flex-wrap:wrap;
+  margin-bottom:var(--spacingM);padding:0}
+h1{font-size:var(--fontSizeBase400);line-height:22px;font-weight:var(--fontWeightSemibold);margin:0;
+  color:var(--colorNeutralForeground1);white-space:nowrap}
+.byline{color:var(--colorNeutralForeground3);font-size:var(--fontSizeBase200);white-space:nowrap}
+.needsadmin{color:var(--colorPaletteOrangeForeground1);font-weight:var(--fontWeightSemibold)}
+.connline{display:flex;gap:var(--spacingS);align-items:center;font-size:var(--fontSizeBase200);
+  color:var(--colorNeutralForeground3);min-width:0;overflow:hidden;white-space:nowrap}
 .connline .mono{overflow:hidden;text-overflow:ellipsis}
+/* XrmToolBox shows the connection in its own status bar. */
 body[data-host="xtb"] .connline{display:none}
-.hicon{width:22px;height:22px;flex:none}
-body[data-host="xtb"] .hicon{width:16px;height:16px}
+.hicon{width:24px;height:24px;flex:none}
 .grow{flex:1 1 auto}
 header.app button.subtle{flex:none}
-body[data-host="xtb"] header.app button.subtle{color:#dfdfff}
 
 /* cards */
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;
-  margin-bottom:14px;box-shadow:var(--shadow)}
-body[data-host="xtb"] .card{border:var(--bevel);box-shadow:none}
-.card h2{font-size:14.5px;font-weight:600;margin:0 0 8px}
-body[data-host="xtb"] .card h2{background:var(--brand);color:#fff;margin:-12px -12px 10px;padding:3px 7px;font-size:12px}
-.card .desc{color:var(--ink2);font-size:12.5px;margin:0 0 10px;max-width:90ch}
+.card{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);
+  border-radius:var(--borderRadiusLarge);padding:var(--spacingL);
+  margin-bottom:var(--spacingL);box-shadow:var(--shadow2)}
+.card h2{font-size:var(--fontSizeBase400);line-height:22px;font-weight:var(--fontWeightSemibold);
+  margin:0 0 var(--spacingS)}
+.card .desc{color:var(--colorNeutralForeground2);font-size:var(--fontSizeBase300);
+  margin:0 0 var(--spacingM);max-width:90ch}
 
 /* tabs */
-[role=tablist]{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:14px}
-[role=tab]{appearance:none;font:inherit;cursor:pointer;background:transparent;color:var(--ink2);
-  border:1px solid transparent;border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;
-  padding:8px 14px;margin-bottom:-1px;font-weight:600;font-size:13.5px}
-[role=tab]:hover{color:var(--ink);background:var(--card2)}
-[role=tab][aria-selected=true]{background:var(--card);color:var(--brand);border-color:var(--line);border-bottom:1px solid var(--card)}
-body[data-host="xtb"] [role=tab]{border:var(--bevel);margin:0 2px -1px 0;background:var(--card)}
-body[data-host="xtb"] [role=tab][aria-selected=true]{border-bottom-color:var(--card);font-weight:bold;color:var(--ink)}
-[role=tab] .cnt{font-weight:400;color:var(--ink3);font-size:12px}
+[role=tablist]{display:flex;gap:var(--spacingXS);flex-wrap:wrap;
+  border-bottom:1px solid var(--colorNeutralStroke2);margin-bottom:var(--spacingL)}
+[role=tab]{appearance:none;font-family:inherit;font-size:var(--fontSizeBase300);
+  line-height:var(--lineHeightBase300);cursor:pointer;background:transparent;
+  color:var(--colorNeutralForeground2);border:1px solid transparent;border-bottom:none;
+  border-radius:var(--borderRadiusMedium) var(--borderRadiusMedium) 0 0;
+  padding:5px var(--spacingL);margin-bottom:-1px;min-height:32px;
+  font-weight:var(--fontWeightSemibold);
+  transition:background var(--durationFaster) var(--curveEasyEase)}
+[role=tab]:hover{color:var(--colorNeutralForeground1);background:var(--colorSubtleBackgroundHover)}
+[role=tab][aria-selected=true]{background:var(--colorNeutralBackground1);color:var(--colorBrandForeground1);
+  border-color:var(--colorNeutralStroke2);border-bottom:1px solid var(--colorNeutralBackground1)}
+[role=tab] .cnt{font-weight:var(--fontWeightRegular);color:var(--colorNeutralForeground3);
+  font-size:var(--fontSizeBase200)}
 
 /* controls */
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
-.spaced{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.field{display:flex;flex-direction:column;gap:4px;min-width:170px}
+.row{display:flex;gap:var(--spacingM);flex-wrap:wrap;align-items:flex-end}
+.spaced{display:flex;gap:var(--spacingS);align-items:center;flex-wrap:wrap;margin:var(--spacingS) 0}
+.field{display:flex;flex-direction:column;gap:var(--spacingXS);min-width:170px}
 .field.wide{flex:1 1 260px}
-.field>label{font-weight:600;font-size:12.5px}
-.hint{color:var(--ink2);font-size:12px}
-input[type=text],input[type=search],select,textarea{font:inherit;font-size:13px;padding:5px 7px;background:var(--field-bg);
-  color:var(--field-ink);border:var(--field-border);border-radius:var(--radius-sm);width:100%}
-input[type=checkbox],input[type=radio]{accent-color:var(--brand);width:15px;height:15px;margin:0}
-button{font:inherit;font-size:13px;cursor:pointer;background:var(--btn-bg);color:var(--btn-ink);border:var(--btn-border);
-  border-radius:var(--radius-sm);padding:6px 13px;font-weight:600}
-button:hover:not(:disabled){background:var(--btn-hover)}
-button:active:not(:disabled){background:var(--btn-active)}
-body[data-host="xtb"] button{min-width:88px}
-body[data-host="xtb"] button:active:not(:disabled){border-style:inset}
-button:disabled{opacity:.55;cursor:not-allowed}
-button.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
-button.primary:hover:not(:disabled){background:var(--brand-hover)}
-body[data-host="xtb"] button.primary{background:var(--btn-bg);color:var(--ink);border:var(--btn-border);font-weight:bold}
-button.danger{border-color:var(--danger);color:var(--danger)}
-button.subtle{background:transparent;border-color:transparent;color:var(--brand);font-weight:400;padding:4px 6px;text-decoration:underline}
-body[data-host="xtb"] button.subtle{background:transparent;border:1px solid transparent;color:#00f;min-width:0}
-label.inline{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer}
+.field>label{font-weight:var(--fontWeightSemibold);font-size:var(--fontSizeBase300)}
+.hint{color:var(--colorNeutralForeground2);font-size:var(--fontSizeBase200)}
+input[type=text],input[type=search],select,textarea{font-family:inherit;font-size:var(--fontSizeBase300);
+  line-height:var(--lineHeightBase300);padding:5px var(--spacingS);min-height:32px;
+  background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);
+  /* StrokeAccessible, NOT Stroke1. This border IS the field's visual boundary, so WCAG 1.4.11
+     requires >=3:1 against the fill; Stroke1 measures only 1.53:1 light / 2.53:1 dark and fails.
+     Fluent's own default input uses Stroke1 - we deliberately diverge. Do not "correct" it back. */
+  border:1px solid var(--colorNeutralStrokeAccessible);
+  border-radius:var(--borderRadiusMedium);width:100%}
+input[type=text]:hover,input[type=search]:hover,select:hover,textarea:hover{
+  /* the resting stroke is already StrokeAccessible, so hover steps up to Foreground2 - as
+     canonical fluent2.css does - otherwise the hover state would be invisible. */
+  border-color:var(--colorNeutralForeground2)}
+input[type=text]:focus,input[type=search]:focus,select:focus,textarea:focus{
+  border-bottom:2px solid var(--colorBrandStroke1)}
+input:disabled,select:disabled,textarea:disabled{background:var(--colorNeutralBackgroundDisabled);
+  color:var(--colorNeutralForegroundDisabled)}
+::placeholder{color:var(--colorNeutralForeground3);opacity:1}
+input[type=checkbox],input[type=radio]{accent-color:var(--colorBrandBackground);width:16px;height:16px;margin:0}
+button{font-family:inherit;font-size:var(--fontSizeBase300);line-height:var(--lineHeightBase300);
+  font-weight:var(--fontWeightSemibold);cursor:pointer;padding:5px var(--spacingM);min-height:32px;
+  background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);
+  /* StrokeAccessible, NOT Stroke1 - same 3:1 control-boundary rule as the inputs (WCAG 1.4.11). */
+  border:1px solid var(--colorNeutralStrokeAccessible);border-radius:var(--borderRadiusMedium);
+  transition:background var(--durationFaster) var(--curveEasyEase)}
+button:hover:not(:disabled){background:var(--colorNeutralBackground1Hover)}
+button:active:not(:disabled){background:var(--colorNeutralBackground3)}
+button.primary{background:var(--colorBrandBackground);border-color:var(--colorBrandBackground);
+  color:var(--colorNeutralForegroundOnBrand)}
+button.primary:hover:not(:disabled){background:var(--colorBrandBackgroundHover);
+  border-color:var(--colorBrandBackgroundHover)}
+button.primary:active:not(:disabled){background:var(--colorBrandBackgroundPressed);
+  border-color:var(--colorBrandBackgroundPressed)}
+button.danger{background:var(--colorNeutralBackground1);border-color:var(--colorPaletteRedForeground1);
+  color:var(--colorPaletteRedForeground1)}
+button.danger:hover:not(:disabled){background:var(--colorPaletteRedBackground1)}
+button.subtle{background:transparent;border-color:transparent;color:var(--colorBrandForegroundLink);
+  font-weight:var(--fontWeightRegular);padding:2px var(--spacingXS);min-height:24px;text-decoration:underline}
+/* the subtle button keeps brand-link ink, so its hover ground must be
+   colorNeutralBackground3 — colorSubtleBackgroundHover drops the dark theme
+   to 4.18:1. */
+button.subtle:hover:not(:disabled){background:var(--colorNeutralBackground3)}
+button:disabled,button.primary:disabled,button.danger:disabled{
+  background:var(--colorNeutralBackgroundDisabled);color:var(--colorNeutralForegroundDisabled);
+  border-color:var(--colorNeutralStroke2);cursor:not-allowed}
+button.subtle:disabled{background:transparent;border-color:transparent;
+  color:var(--colorNeutralForegroundDisabled);cursor:not-allowed}
+label.inline{display:inline-flex;align-items:center;gap:var(--spacingS);font-size:var(--fontSizeBase300);
+  cursor:pointer}
 
 /* badges */
-.badge{display:inline-block;padding:1px 7px;border-radius:var(--radius-pill);font-size:11px;font-weight:600;
-  background:var(--card2);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
-body[data-host="xtb"] .badge{border:1px solid var(--line);background:var(--card2)}
-.badge.brand{background:var(--brand-soft);color:var(--brand);border-color:var(--info-line)}
-.badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
-.badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
-.badge.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
-body[data-host="xtb"] .badge.brand{background:var(--brand);color:#fff}
-body[data-host="xtb"] .badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
-body[data-host="xtb"] .badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
-body[data-host="xtb"] .badge.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
+.badge{display:inline-block;padding:1px var(--spacingS);border-radius:var(--borderRadiusCircular);
+  font-size:var(--fontSizeBase200);line-height:16px;font-weight:var(--fontWeightSemibold);
+  background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground2);
+  border:1px solid var(--colorNeutralStroke2);white-space:nowrap}
+.badge.brand{background:var(--colorBrandBackground);color:var(--colorNeutralForegroundOnBrand);
+  border-color:var(--colorBrandBackground)}
+.badge.ok{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1);
+  border-color:var(--colorPaletteGreenBorder1)}
+/* Fluent ships a yellow background but no AA-safe yellow ink, so warn keeps
+   neutral text and carries the hue in its background and border. */
+.badge.warn{background:var(--colorPaletteYellowBackground1);color:var(--colorNeutralForeground1);
+  border-color:var(--colorPaletteOrangeForeground1)}
+.badge.danger{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1);
+  border-color:var(--colorPaletteRedBorder1)}
 
 /* banners */
-.bar{margin:8px 0;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--info-line);background:var(--info-bg);font-size:12.5px}
-.bar.ok{background:var(--ok-bg);border-color:var(--ok-line)}
-.bar.warn{background:var(--warn-bg);border-color:var(--warn-line)}
-.bar.error{background:var(--danger-bg);border-color:var(--danger-line)}
+.bar{margin:var(--spacingS) 0;padding:var(--spacingS) var(--spacingM);
+  border-radius:var(--borderRadiusMedium);border:1px solid var(--colorBrandStroke1);
+  background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);
+  font-size:var(--fontSizeBase300)}
+.bar.ok{background:var(--colorPaletteGreenBackground1);border-color:var(--colorPaletteGreenBorder1)}
+.bar.warn{background:var(--colorPaletteYellowBackground1);border-color:var(--colorPaletteOrangeForeground1)}
+.bar.error{background:var(--colorPaletteRedBackground1);border-color:var(--colorPaletteRedBorder1)}
 .bar b{display:block;margin-bottom:2px}
-body[data-host="xtb"] .bar{border:2px inset #c0c0c0}
 
 /* progress */
-.prog{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:var(--radius-pill);overflow:hidden;margin-top:5px}
-body[data-host="xtb"] .prog{height:16px;border:2px inset #c0c0c0;border-radius:0}
-.prog>i{display:block;height:100%;background:var(--brand);width:0;transition:width .18s linear}
-.loader{display:flex;gap:9px;align-items:center;padding:8px 10px;background:var(--card2);border:1px solid var(--line);
-  border-radius:var(--radius-sm);margin:8px 0;font-size:12.5px}
-.spinner{width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+.prog{height:8px;background:var(--colorNeutralBackground3);border:1px solid var(--colorNeutralStroke2);
+  border-radius:var(--borderRadiusCircular);overflow:hidden;margin-top:var(--spacingXS)}
+/* the fill is the only thing that conveys progress, so it must clear 3:1 against
+   its own track (WCAG 1.4.11). colorBrandBackground is only 2.77:1 on the dark
+   track; colorBrandStroke1 is 4.94:1 light / 6.56:1 dark - and matches the spinner. */
+.prog>i{display:block;height:100%;background:var(--colorBrandStroke1);width:0;transition:width .18s linear}
+.loader{display:flex;gap:var(--spacingS);align-items:center;padding:var(--spacingS) var(--spacingM);
+  background:var(--colorNeutralBackground3);border:1px solid var(--colorNeutralStroke2);
+  border-radius:var(--borderRadiusMedium);margin:var(--spacingS) 0;font-size:var(--fontSizeBase300)}
+.spinner{width:16px;height:16px;border:2px solid var(--colorNeutralStroke2);
+  border-top-color:var(--colorBrandStroke1);border-radius:50%;
   animation:spin .8s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}}
 
 /* tables */
-.scroll{overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--card);max-height:60vh}
-body[data-host="xtb"] .scroll{border:2px inset #c0c0c0;border-radius:0;background:#fff}
-table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
-th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
-th{position:sticky;top:0;z-index:2;background:var(--th-bg);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--line)}
-body[data-host="xtb"] th{border:var(--bevel);border-bottom-width:2px}
-tbody tr:nth-child(even){background:var(--row-zebra)}
-tbody tr:hover{background:var(--row-hover)}
-tbody tr.sel{background:var(--row-sel)!important;color:var(--row-sel-ink)}
+.scroll{overflow:auto;border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusLarge);
+  background:var(--colorNeutralBackground1);max-height:60vh}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:var(--fontSizeBase300);
+  /* digits share one advance width, so figures stack in a true column */
+  font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:var(--spacingXS) var(--spacingM);
+  border-bottom:1px solid var(--colorNeutralStroke2);vertical-align:top}
+/* Every cell centres on one axis whatever it holds - a bare depth letter, a pill, a two-line
+   label. Without this a row carrying a pill sits a pixel or two off its neighbours. */
+thead th,tbody td{vertical-align:middle}
+th{position:sticky;top:0;z-index:2;background:var(--colorNeutralBackground3);
+  color:var(--colorNeutralForeground2);font-weight:var(--fontWeightSemibold);white-space:nowrap;
+  border-bottom:1px solid var(--colorNeutralStroke1)}
+tbody tr:nth-child(even){background:var(--colorNeutralBackground2)}
+tbody tr:hover{background:var(--colorSubtleBackgroundHover)}
+tbody tr.sel{background:var(--colorRowSelected)!important;color:var(--colorNeutralForeground1)}
 tbody tr.sel .muted,tbody tr.sel .hint{color:inherit;opacity:.85}
-tbody tr.sel button.subtle{color:var(--row-sel-ink)}
-body[data-host="xtb"] tbody tr.sel button.subtle{color:var(--row-sel-ink)}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-.muted{color:var(--ink2)}
-.mono{font-family:var(--font-mono);font-size:11.5px}
+tbody tr.sel button.subtle{color:var(--colorNeutralForeground1)}
+/* Narrow value columns. .num goes on BOTH the th and every td of the column, so the heading
+   sits centred over its values instead of hugging the left edge and the whole column shares
+   one axis. Genuine text columns (names, descriptions, logical names) stay left-aligned. */
+th.num,td.num{text-align:center;padding-left:var(--spacingXS);padding-right:var(--spacingXS)}
+/* a centred cell centres its contents as a block too, so pills, glyphs and depth letters
+   line up with the plain numbers in the same column */
+td.num>*{display:inline-flex;align-items:center;justify-content:center}
+.muted{color:var(--colorNeutralForeground2)}
+.mono{font-family:var(--fontFamilyMonospace);font-size:var(--fontSizeBase200)}
 .nowrap{white-space:nowrap}
 .clickable{cursor:pointer}
 th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none}
-th.sortable:hover{color:var(--brand)}
-th.sortable::after{content:"";margin-left:5px;opacity:.45}
+th.sortable:hover{color:var(--colorBrandForeground1)}
+th.sortable::after{content:"";margin-left:5px;opacity:.6}
 th.sortable[aria-sort=ascending]::after{content:"\25B2"}
 th.sortable[aria-sort=descending]::after{content:"\25BC"}
 
 /* permission matrix */
-th.v{text-align:center;font-size:11px}
+th.v{text-align:center;font-size:var(--fontSizeBase200)}
 td.v{text-align:center}
-table.matrix th.v{width:44px}
+table.matrix th.v{width:44px;padding:var(--spacingXS) 2px}
 table.matrix td.v{padding:3px 2px}
-.cell{display:inline-block;min-width:26px;padding:1px 4px;border-radius:var(--radius-sm);font-size:11px;
+.cell{display:inline-block;min-width:26px;padding:1px var(--spacingXS);
+  border-radius:var(--borderRadiusMedium);font-size:var(--fontSizeBase200);line-height:18px;
   font-weight:700;border:1px solid transparent}
-.cell.d0{color:var(--d0-ink);font-weight:400}
+.cell.d0{color:var(--colorNeutralForeground3);font-weight:var(--fontWeightRegular);background:transparent}
 /* the same class as a button is interactive text, so it needs full contrast */
-button.cell.d0{color:var(--ink2);font-weight:600;border:1px solid var(--line)}
-.cell.d1{background:var(--d1-bg);color:var(--d1-ink)}
-.cell.d2{background:var(--d2-bg);color:var(--d2-ink)}
-.cell.d3{background:var(--d3-bg);color:var(--d3-ink)}
-.cell.d4{background:var(--d4-bg);color:var(--d4-ink)}
-.cell.df{background:var(--df-bg);color:var(--df-ink)}
-button.cell{cursor:pointer;font-family:inherit}
-.csnote{color:var(--ink2);font-size:11.5px}
-.legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--ink2);margin:8px 0}
-.legend .cell{margin-right:4px}
+button.cell.d0{color:var(--colorNeutralForeground2);font-weight:var(--fontWeightSemibold);
+  /* a real <button>, so its edge is a control boundary: StrokeAccessible, not Stroke1. */
+  border:1px solid var(--colorNeutralStrokeAccessible);background:var(--colorNeutralBackground1)}
+.cell.d1{background:var(--depth1Background);color:var(--depth1Foreground)}
+.cell.d2{background:var(--depth2Background);color:var(--depth2Foreground)}
+.cell.d3{background:var(--depth3Background);color:var(--depth3Foreground)}
+.cell.d4{background:var(--depth4Background);color:var(--depth4Foreground)}
+.cell.df{background:var(--colorPaletteYellowBackground1);color:var(--colorNeutralForeground1);
+  border-color:var(--colorPaletteOrangeForeground1)}
+button.cell{cursor:pointer;font-family:inherit;min-height:20px;padding:1px var(--spacingXS)}
+.csnote{color:var(--colorNeutralForeground2);font-size:var(--fontSizeBase200)}
+.legend{display:flex;gap:var(--spacingM);flex-wrap:wrap;align-items:center;
+  font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground2);margin:var(--spacingS) 0}
+.legend .cell{margin-right:var(--spacingXS)}
 
 /* role pills */
-.pills{display:flex;gap:4px;flex-wrap:wrap}
-.pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:var(--radius-pill);font-size:11.5px;
-  background:var(--brand-soft);color:var(--brand);border:1px solid var(--info-line);white-space:nowrap}
-body[data-host="xtb"] .pill{background:var(--card2);color:var(--ink);border:1px solid var(--line)}
-.pill.team{background:var(--card2);color:var(--ink2);border-color:var(--line)}
-.pill-src{font-size:9px;font-weight:700;letter-spacing:.4px;padding:0 4px;border-radius:var(--radius-sm);
-  background:var(--brand);color:var(--brand-ink);flex:none}
-.pill.team .pill-src,.pill-src.team{background:var(--ink2);color:var(--card)}
-.pill-via{font-size:10.5px;opacity:.85}
+.pills{display:flex;gap:var(--spacingXS);flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:var(--spacingXS);padding:1px var(--spacingS);
+  border-radius:var(--borderRadiusCircular);font-size:var(--fontSizeBase200);line-height:16px;
+  background:var(--colorNeutralBackground3);color:var(--colorBrandForeground1);
+  border:1px solid var(--colorBrandStroke1);white-space:nowrap}
+.pill.team{background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground2);
+  border-color:var(--colorNeutralStroke2)}
+.pill-src{font-size:10px;font-weight:700;letter-spacing:.4px;padding:0 var(--spacingXS);
+  border-radius:var(--borderRadiusSmall);background:var(--colorBrandBackground);
+  color:var(--colorNeutralForegroundOnBrand);flex:none}
+.pill.team .pill-src,.pill-src.team{background:var(--colorNeutralForeground2);
+  color:var(--colorNeutralBackground1)}
+.pill-via{font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground2)}
 
 /* modal */
-.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;
-  z-index:60;padding:16px}
-.modal{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+.backdrop{position:fixed;inset:0;background:var(--colorBackgroundOverlay);display:flex;align-items:center;
+  justify-content:center;z-index:60;padding:var(--spacingL)}
+.modal{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);
+  border-radius:var(--borderRadiusLarge);box-shadow:var(--shadow16);
   max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column}
-body[data-host="xtb"] .modal{border:var(--bevel);border-radius:0}
-.modal h3{margin:0;padding:10px 14px;font-size:14px;border-bottom:1px solid var(--line)}
-body[data-host="xtb"] .modal h3{background:var(--titlebar-bg);color:#fff;padding:3px 6px;font-size:12px;border:none}
-.modal .body{padding:14px;overflow:auto}
-.modal .acts{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--line)}
+.modal h3{margin:0;padding:var(--spacingM) var(--spacingL);font-size:var(--fontSizeBase400);
+  line-height:22px;font-weight:var(--fontWeightSemibold);
+  border-bottom:1px solid var(--colorNeutralStroke2)}
+.modal .body{padding:var(--spacingL);overflow:auto}
+.modal .acts{display:flex;gap:var(--spacingS);justify-content:flex-end;
+  padding:var(--spacingM) var(--spacingL);border-top:1px solid var(--colorNeutralStroke2)}
 
 /* log */
-.log{white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--field-bg);color:var(--ink);
-  border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px;font-family:var(--font-mono);font-size:11.5px}
-body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
+.log{white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--colorNeutralBackground3);
+  color:var(--colorNeutralForeground1);border:1px solid var(--colorNeutralStroke2);
+  border-radius:var(--borderRadiusMedium);padding:var(--spacingS);
+  font-family:var(--fontFamilyMonospace);font-size:var(--fontSizeBase200)}
 
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
-.kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;font-size:12.5px;align-items:baseline}
-.kv dt{color:var(--ink2)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--spacingM)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:var(--spacingXS) var(--spacingM);
+  font-size:var(--fontSizeBase300);align-items:baseline}
+.kv dt{color:var(--colorNeutralForeground2)}
 .kv dd{margin:0}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 </style>
@@ -432,15 +602,15 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
       <div class="scroll"><table class="matrix" id="tblPerms">
         <thead><tr>
           <th class="sortable" data-psort="name" aria-sort="ascending">Table</th>
-          <th class="v" title="Create">C<span class="sr-only"> Create</span></th>
-          <th class="v" title="Read">R<span class="sr-only"> Read</span></th>
-          <th class="v" title="Write (update)">U<span class="sr-only"> Write (update)</span></th>
-          <th class="v" title="Delete">D<span class="sr-only"> Delete</span></th>
-          <th class="v" title="Append (attach this record to another)">Ap<span class="sr-only">pend</span></th>
-          <th class="v" title="Append To (let others attach to this record)">At<span class="sr-only"> Append To</span></th>
-          <th class="v" title="Assign (change owner)">As<span class="sr-only">sign</span></th>
-          <th class="v" title="Share">Sh<span class="sr-only">are</span></th>
-          <th class="v" title="Column security: secured columns on this table the user can reach">CS<span class="sr-only"> Column security</span></th>
+          <th class="v num" title="Create">C<span class="sr-only"> Create</span></th>
+          <th class="v num" title="Read">R<span class="sr-only"> Read</span></th>
+          <th class="v num" title="Write (update)">U<span class="sr-only"> Write (update)</span></th>
+          <th class="v num" title="Delete">D<span class="sr-only"> Delete</span></th>
+          <th class="v num" title="Append (attach this record to another)">Ap<span class="sr-only">pend</span></th>
+          <th class="v num" title="Append To (let others attach to this record)">At<span class="sr-only"> Append To</span></th>
+          <th class="v num" title="Assign (change owner)">As<span class="sr-only">sign</span></th>
+          <th class="v num" title="Share">Sh<span class="sr-only">are</span></th>
+          <th class="v num" title="Column security: secured columns on this table the user can reach">CS<span class="sr-only"> Column security</span></th>
           <th class="sortable" data-psort="logical">Logical name</th>
         </tr></thead>
         <tbody id="permsBody"></tbody>
@@ -473,8 +643,8 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
         <thead><tr>
           <th class="sortable" data-ksort="table" aria-sort="ascending">Table</th>
           <th class="sortable" data-ksort="column">Column</th>
-          <th class="v">Read</th><th class="v">Create</th><th class="v">Update</th>
-          <th class="v">Unmasked</th>
+          <th class="v num">Read</th><th class="v num">Create</th><th class="v num">Update</th>
+          <th class="v num">Unmasked</th>
           <th>Granted by</th>
         </tr></thead>
         <tbody id="colsBody"></tbody>
@@ -568,7 +738,7 @@ body[data-host="xtb"] .log{background:#000;color:#0f0;border:2px inset #c0c0c0}
 "use strict";
 
 /* ================================ constants ================================ */
-var APP_VERSION = "1.0.6";
+var APP_VERSION = "1.0.7";
 var API_VER     = "v9.2";
 var SYSADMIN_TEMPLATE = "627090ff-40a3-4053-8790-584edc5be201"; // constant in every environment
 
@@ -1667,10 +1837,10 @@ function renderCols(){
     body.appendChild(el("tr",null,[
       el("td",null,[ el("div",{text:r.col.tableLabel}),  el("div",{class:"muted mono", text:r.col.table}) ]),
       el("td",null,[ el("div",{text:r.col.columnLabel}), el("div",{class:"muted mono", text:r.col.column}) ]),
-      el("td",{class:"v"},[ yesNo(r.read,   "Read") ]),
-      el("td",{class:"v"},[ yesNo(r.create, "Create") ]),
-      el("td",{class:"v"},[ yesNo(r.update, "Update") ]),
-      el("td",{class:"v"},[ r.unmasked
+      el("td",{class:"v num"},[ yesNo(r.read,   "Read") ]),
+      el("td",{class:"v num"},[ yesNo(r.create, "Create") ]),
+      el("td",{class:"v num"},[ yesNo(r.update, "Update") ]),
+      el("td",{class:"v num"},[ r.unmasked
         ? el("span",{class:"badge warn", text: UNMASKED[r.unmasked] || String(r.unmasked),
             title:"Can read the real value behind a masking rule"})
         : el("span",{class:"muted", text:EMDASH}) ]),
@@ -2052,9 +2222,9 @@ function renderPerms(){
 
     var tr = el("tr",null,[ nameCell ]);
     VERBS.forEach(function(v){
-      tr.appendChild(el("td",{class:"v"},[ cellButton(v, r.cells[v.key], r.table.label) ]));
+      tr.appendChild(el("td",{class:"v num"},[ cellButton(v, r.cells[v.key], r.table.label) ]));
     });
-    tr.appendChild(el("td",{class:"v"},[ csCell(r) ]));
+    tr.appendChild(el("td",{class:"v num"},[ csCell(r) ]));
     tr.appendChild(el("td",{class:"mono muted", text:r.table.logical}));
     body.appendChild(tr);
   });
@@ -2270,7 +2440,7 @@ function renderCopyTargets(){
 
   var warn = t.filter(function(u){ return u.isdisabled===true || u._type==="app" || u._type==="system"; });
   var tbl = el("table",null,[
-    el("thead",null,[el("tr",null,[el("th",{text:"User"}),el("th",{text:"Business unit"}),el("th",{text:"Type"}),el("th",{text:"Roles now"}),el("th",null,[])])]),
+    el("thead",null,[el("tr",null,[el("th",{text:"User"}),el("th",{text:"Business unit"}),el("th",{text:"Type"}),el("th",{class:"num",text:"Roles now"}),el("th",null,[])])]),
     el("tbody",null, t.map(function(u){
       return el("tr",null,[
         el("td",null,[el("div",{text:u._name}), el("div",{class:"muted mono", text:u.domainname||""}),

@@ -12,7 +12,7 @@ out of sync.
 | Host | Detected by | Theme |
 | --- | --- | --- |
 | Power Platform ToolBox | `window.dataverseAPI` | Dark |
-| XrmToolBox | `window.XTB_CONFIG` | Windows 95 |
+| XrmToolBox | `window.XTB_CONFIG` | Light |
 | Dynamics 365 web resource | `Xrm` / same origin | Light |
 
 | Path | What it is |

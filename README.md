@@ -134,7 +134,7 @@ The same tool runs in three places and themes itself to match each one:
 | Host | Theme |
 | --- | --- |
 | Power Platform ToolBox | Dark |
-| XrmToolBox | Windows 95 |
+| XrmToolBox | Light |
 | Dynamics 365 web resource | Light |
 
 ## Installing

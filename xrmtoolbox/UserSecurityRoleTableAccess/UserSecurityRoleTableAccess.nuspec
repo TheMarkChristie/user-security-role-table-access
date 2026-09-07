@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>MarkChristie.UserSecurityRoleTableAccess</id>
-    <version>1.0.6</version>
+    <version>1.0.7</version>
     <title>User Access Explorer</title>
     <authors>Mark Christie</authors>
     <owners>Mark Christie</owners>
@@ -14,7 +14,7 @@
     <license type="expression">MIT</license>
     <description>See exactly what everyone in your Dataverse environment can do, and change it in bulk. Lists every user with the security roles they have, showing which ones were given to them directly and which they picked up from a team. For any user it works out what that actually means in practice: which tables they can create, read, edit, delete, assign and share records in, at what level, and which protected columns they can see. Then it copies that setup onto other people - security roles, column security profiles, team membership and business unit - showing you exactly what will change before anything is saved. You need the System Administrator role to use it.</description>
     <summary>See exactly what everyone in your Dataverse environment can do, and change it in bulk. Needs the System Administrator role.</summary>
-    <releaseNotes>Initial release. Users with direct and team-inherited security roles; effective per-table CRUD depth; per-user column security; and copy/assign of roles, column security profiles, team membership and business unit with a preview and a per-item log. WebView2-hosted Windows 95 UI; shared logic with the D365 web resource and the Power Platform ToolBox tool. Needs the System Administrator role.</releaseNotes>
+    <releaseNotes>The interface has been rebuilt in the Fluent 2 design language, so the tool now looks like a modern model-driven app - light in XrmToolBox, dark in Power Platform ToolBox. This is a visual change only. Nothing about what the tool does has changed. Needs the System Administrator role.</releaseNotes>
     <copyright>Copyright 2026 Mark Christie</copyright>
     <tags>XrmToolBox Plugin Dataverse Dynamics365 PowerPlatform Security SecurityRoles Privileges Permissions Users Audit Governance</tags>
     <dependencies>

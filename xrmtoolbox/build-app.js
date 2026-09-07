@@ -6,13 +6,13 @@
  * There is deliberately NO skinning step. The HTML detects its host at runtime
  * (window.XTB_CONFIG -> XrmToolBox, window.dataverseAPI -> Power Platform ToolBox,
  * Xrm/same-origin -> D365 web resource) and sets body[data-host], and the stylesheet
- * carries all three palettes as design tokens:
+ * carries both palettes as Fluent 2 design tokens:
  *
- *   :root                    light  (D365 web resource / standalone)
+ *   :root                    light  (D365 web resource / standalone - Fluent 2)
  *   body[data-host="pptb"]   dark   (Power Platform ToolBox - dark by default)
- *   body[data-host="xtb"]    Windows 95 (XrmToolBox)
+ *   body[data-host="xtb"]    light  (XrmToolBox - Fluent 2 light, same as the web resource)
  *
- * That keeps one stylesheet instead of three that drift apart.
+ * That keeps one stylesheet instead of several that drift apart.
  *
  * Output: UserSecurityRoleTableAccess/app/user-access-explorer.html  (bundled into the plugin by the .csproj)
  *

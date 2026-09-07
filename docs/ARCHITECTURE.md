@@ -230,7 +230,7 @@ the privileges the *caller* is missing and is surfaced verbatim.
   verb, the table and the access level.
 - Tablist implements arrow-key navigation with roving `tabindex`; the modal traps Tab, closes on Escape
   and restores focus; matrix cells are real `<button>`s.
-- Focus outlines are replaced, never removed; the Windows 95 theme uses the classic dotted ring.
+- Focus outlines are replaced, never removed; both themes use a 2px `colorStrokeFocus2` ring at 2px offset.
 - `prefers-reduced-motion` collapses the spinner and progress animation.
 
 ## 6. Known limits
