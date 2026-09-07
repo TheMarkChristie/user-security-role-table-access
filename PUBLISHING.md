@@ -17,7 +17,7 @@ through different channels:
 ## A. XrmToolBox → Tool Library
 
 **Prerequisites:** a [nuget.org](https://www.nuget.org) account + API key; `nuget.exe` on PATH
-(or NuGet Package Explorer); Node on PATH (the build copies the HTML into `app\index.html`);
+(or NuGet Package Explorer); Node on PATH (the build copies the HTML into `app\user-access-explorer.html`);
 the GitHub repo above.
 
 **Rule:** the NuGet `version` must **exactly** match the assembly version. Here both are
@@ -25,7 +25,7 @@ the GitHub repo above.
 `.nuspec` `<version>`).
 
 1. **Build Release** (the `BuildApp` target runs `xrmtoolbox\build-app.js` first, which copies
-   the canonical HTML into `app\index.html`):
+   the canonical HTML into `app\user-access-explorer.html`):
    ```powershell
    cd V:\PCF\UserSecurityRoleTableAccess\xrmtoolbox\UserSecurityRoleTableAccess
    dotnet build -c Release
@@ -38,14 +38,14 @@ the GitHub repo above.
    One warning is expected and correct: **NU5100** ("assembly is not inside the 'lib' folder") — an
    XrmToolBox plugin belongs in `Plugins\`, which is exactly what the nuspec does.
 
-   Or with the classic tool, packing from the custom nuspec (ships only our DLL + `app\index.html` into a
+   Or with the classic tool, packing from the custom nuspec (ships only our DLL + `app\user-access-explorer.html` into a
    `Plugins` folder — XrmToolBox already provides WebView2 and the Dataverse SDK):
    ```powershell
    nuget pack UserSecurityRoleTableAccess.nuspec -OutputDirectory ..\..\_dist
    ```
    Produces `MarkChristie.UserSecurityRoleTableAccess.1.0.0.nupkg`.
    *(Sanity check in NuGet Package Explorer: it must contain `Plugins\UserSecurityRoleTableAccess.dll`
-   + `Plugins\app\index.html`, the `XrmToolBox` dependency, the `XrmToolBox` tag, author/owner
+   + `Plugins\app\user-access-explorer.html`, the `XrmToolBox` dependency, the `XrmToolBox` tag, author/owner
    = Mark Christie, and a working `iconUrl`.)*
 3. **Push to nuget.org** and wait for indexing (a few minutes):
    ```powershell

@@ -148,14 +148,17 @@ namespace UserSecurityRoleTableAccess
 
                 var html = Path.Combine(
                     Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".",
-                    "app", "index.html");
+                    // NOTE: every plugin dll lands flat in Plugins\, so all WebView2 tools map
+                    // their virtual host onto the SAME Plugins/app folder. This filename must
+                    // stay unique, or the last tool installed overwrites everyone else's app.
+                    "app", "user-access-explorer.html");
 
                 if (File.Exists(html))
                     // via the virtual host, so the page has a real origin for the Dataverse CORS preflight
-                    _web.CoreWebView2.Navigate("https://" + VirtualHost + "/index.html");
+                    _web.CoreWebView2.Navigate("https://" + VirtualHost + "/user-access-explorer.html");
                 else
                     _web.CoreWebView2.NavigateToString(
-                        "<h3 style='font-family:Segoe UI'>app/index.html not found next to the plugin dll.</h3>" +
+                        "<h3 style='font-family:Segoe UI'>app/user-access-explorer.html not found next to the plugin dll.</h3>" +
                         "<p>The build copies prx3_UserSecurityRoleTableAccess.html into the output 'app' folder. " +
                         "Run <code>node xrmtoolbox\\build-app.js</code> and rebuild the project. " +
                         "(That step needs Node on PATH and fails quietly without it.)</p>");

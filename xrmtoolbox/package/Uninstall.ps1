@@ -30,7 +30,7 @@ if ($running -and -not $Force) {
 
 $targets = @(
     (Join-Path $dst 'UserSecurityRoleTableAccess.dll'),
-    (Join-Path $dst 'app\index.html')
+    (Join-Path $dst 'app\user-access-explorer.html')
 )
 
 $removed = 0

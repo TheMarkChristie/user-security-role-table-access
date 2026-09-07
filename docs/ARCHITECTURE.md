@@ -248,7 +248,7 @@ the privileges the *caller* is missing and is surfaced verbatim.
 The obvious way to host a bundled HTML file in WebView2 is to navigate to its `file://` URL. That breaks
 every Dataverse call: a `file://` page sends `Origin: null` on the CORS preflight, and the Web API refuses
 it. The plugin therefore maps its `app` folder onto a virtual host with
-`SetVirtualHostNameToFolderMapping` and navigates to `https://usersecurityroletableaccess.local/index.html`, so
+`SetVirtualHostNameToFolderMapping` and navigates to `https://usersecurityroletableaccess.local/user-access-explorer.html`, so
 the page has a real, stable origin. The bearer token from the active XrmToolBox connection is injected as
 `window.XTB_CONFIG` via `AddScriptToExecuteOnDocumentCreatedAsync`, before any document script runs.
 

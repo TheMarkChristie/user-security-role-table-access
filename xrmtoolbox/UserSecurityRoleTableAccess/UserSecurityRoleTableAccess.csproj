@@ -14,7 +14,7 @@
     <Product>User Access Explorer</Product>
     <Company>Mark Christie</Company>
     <Authors>Mark Christie</Authors>
-    <Version>1.0.5</Version>
+    <Version>1.0.6</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,7 +25,9 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3351.48" />
   </ItemGroup>
 
-  <!-- Copy the canonical single-file app into app/index.html before each build.
+  <!-- Copy the canonical single-file app into app/user-access-explorer.html before each build.
+       The name must stay unique: every plugin dll lands flat in Plugins\, so every
+       WebView2 tool maps its virtual host onto the SAME Plugins/app folder.
        The HTML self-themes to Windows 95 at runtime via body[data-host="xtb"],
        so there is no separate skinning step to drift out of sync. -->
   <Target Name="BuildApp" BeforeTargets="BeforeBuild">
@@ -34,7 +36,7 @@
 
   <ItemGroup>
     <!-- ship the app HTML next to the dll so WebView2 can load it -->
-    <None Include="app\index.html">
+    <None Include="app\user-access-explorer.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

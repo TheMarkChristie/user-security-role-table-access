@@ -66,7 +66,7 @@ function Copy-IfChanged([string] $from, [string] $to) {
 try {
     Copy-IfChanged (Join-Path $src 'UserSecurityRoleTableAccess.dll') (Join-Path $dst 'UserSecurityRoleTableAccess.dll')
     New-Item -ItemType Directory -Force -Path (Join-Path $dst 'app') | Out-Null
-    Copy-IfChanged (Join-Path $src 'app\index.html') (Join-Path $dst 'app\index.html')
+    Copy-IfChanged (Join-Path $src 'app\user-access-explorer.html') (Join-Path $dst 'app\user-access-explorer.html')
 }
 catch {
     Write-Host ''
@@ -78,14 +78,14 @@ catch {
 
 # --- clear the "downloaded from the internet" mark, or .NET may refuse to load the assembly -------
 try {
-    Get-ChildItem -Path $dst -Recurse -Include 'UserSecurityRoleTableAccess.dll','index.html' -ErrorAction SilentlyContinue |
+    Get-ChildItem -Path $dst -Recurse -Include 'UserSecurityRoleTableAccess.dll','user-access-explorer.html' -ErrorAction SilentlyContinue |
         Unblock-File -ErrorAction SilentlyContinue
 } catch { }
 
 Write-Host ''
 Write-Host '  Installed:' -ForegroundColor Green
 Write-Host "    $dst\UserSecurityRoleTableAccess.dll"
-Write-Host "    $dst\app\index.html"
+Write-Host "    $dst\app\user-access-explorer.html"
 Write-Host ''
 Write-Host '  Next: start (or restart) XrmToolBox and open "User Access Explorer".' -ForegroundColor Cyan
 Write-Host '  Connect with an OAuth / MFA connection - the tool needs an access token.' -ForegroundColor DarkGray

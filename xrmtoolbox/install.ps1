@@ -21,7 +21,7 @@ function Copy-IfChanged([string] $from, [string] $to) {
 
 Copy-IfChanged (Join-Path $src 'UserSecurityRoleTableAccess.dll') (Join-Path $dst 'UserSecurityRoleTableAccess.dll')
 New-Item -ItemType Directory -Force (Join-Path $dst 'app') | Out-Null
-Copy-IfChanged (Join-Path $src 'app\index.html') (Join-Path $dst 'app\index.html')
+Copy-IfChanged (Join-Path $src 'app\user-access-explorer.html') (Join-Path $dst 'app\user-access-explorer.html')
 
-Write-Host "Installed UserSecurityRoleTableAccess.dll + app\index.html to:`n  $dst" -ForegroundColor Green
+Write-Host "Installed UserSecurityRoleTableAccess.dll + app\user-access-explorer.html to:`n  $dst" -ForegroundColor Green
 Write-Host "Restart XrmToolBox -> tool 'User Access Explorer'." -ForegroundColor Yellow

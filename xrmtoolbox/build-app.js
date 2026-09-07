@@ -14,7 +14,11 @@
  *
  * That keeps one stylesheet instead of three that drift apart.
  *
- * Output: UserSecurityRoleTableAccess/app/index.html  (bundled into the plugin by the .csproj)
+ * Output: UserSecurityRoleTableAccess/app/user-access-explorer.html  (bundled into the plugin by the .csproj)
+ *
+ * The filename must stay UNIQUE. Every XrmToolBox plugin dll lands flat in Plugins, so every
+ * WebView2 tool maps its virtual host onto the SAME Plugins/app folder - a generic index.html
+ * there is overwritten by whichever tool installs last.
  * Run:    node build-app.js
  */
 const fs = require("fs");
@@ -23,7 +27,7 @@ const path = require("path");
 const root = __dirname;
 const src = path.join(root, "..", "webresource", "prx3_UserSecurityRoleTableAccess.html");
 const outDir = path.join(root, "UserSecurityRoleTableAccess", "app");
-const out = path.join(outDir, "index.html");
+const out = path.join(outDir, "user-access-explorer.html");
 
 if (!fs.existsSync(src)) throw new Error("Canonical HTML not found: " + src);
 

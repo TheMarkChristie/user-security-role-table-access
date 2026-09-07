@@ -1,5 +1,5 @@
 ================================================================================
-  USER ACCESS EXPLORER  v1.0.5  --  a tool for XrmToolBox
+  USER ACCESS EXPLORER  v1.0.6  --  a tool for XrmToolBox
   by Mark Christie   https://github.com/TheMarkChristie
 ================================================================================
 
@@ -80,7 +80,7 @@ INSTALL
   so you end up with:
 
       ...\XrmToolBox\Plugins\UserSecurityRoleTableAccess.dll
-      ...\XrmToolBox\Plugins\app\index.html
+      ...\XrmToolBox\Plugins\app\user-access-explorer.html
 
   Both files are needed - the DLL is a thin host and the HTML is the tool.
 
@@ -157,7 +157,7 @@ UNINSTALL
 
   Or delete these two files yourself:
       %APPDATA%\MscrmTools\XrmToolBox\Plugins\UserSecurityRoleTableAccess.dll
-      %APPDATA%\MscrmTools\XrmToolBox\Plugins\app\index.html
+      %APPDATA%\MscrmTools\XrmToolBox\Plugins\app\user-access-explorer.html
 
   Nothing else is installed. No registry keys, no services, no admin rights.
 

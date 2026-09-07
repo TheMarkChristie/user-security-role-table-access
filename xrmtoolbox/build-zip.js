@@ -10,7 +10,7 @@
  *   Uninstall.cmd  /  Uninstall.ps1
  *   Plugins/
  *     UserSecurityRoleTableAccess.dll
- *     app/index.html
+ *     app/user-access-explorer.html
  *
  * Prerequisite: dotnet build -c Release   (which also runs build-app.js)
  * Run:          node build-zip.js
@@ -33,7 +33,7 @@ const version = (csproj.match(/<Version>([^<]+)<\/Version>/) || [])[1];
 if (!version) throw new Error("Could not read <Version> from UserSecurityRoleTableAccess.csproj");
 
 const dll  = path.join(bin, "UserSecurityRoleTableAccess.dll");
-const html = path.join(bin, "app", "index.html");
+const html = path.join(bin, "app", "user-access-explorer.html");
 for (const f of [dll, html]) {
   if (!fs.existsSync(f)) {
     throw new Error("Missing " + f + "\nBuild first:  dotnet build -c Release  (in xrmtoolbox/UserSecurityRoleTableAccess)");
@@ -46,7 +46,7 @@ fs.mkdirSync(path.join(staging, "Plugins", "app"), { recursive: true });
 fs.mkdirSync(dist, { recursive: true });
 
 fs.copyFileSync(dll,  path.join(staging, "Plugins", "UserSecurityRoleTableAccess.dll"));
-fs.copyFileSync(html, path.join(staging, "Plugins", "app", "index.html"));
+fs.copyFileSync(html, path.join(staging, "Plugins", "app", "user-access-explorer.html"));
 for (const f of fs.readdirSync(pkgSrc)) {
   fs.copyFileSync(path.join(pkgSrc, f), path.join(staging, f));
 }

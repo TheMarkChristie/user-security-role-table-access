@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>MarkChristie.UserSecurityRoleTableAccess</id>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
     <title>User Access Explorer</title>
     <authors>Mark Christie</authors>
     <owners>Mark Christie</owners>
@@ -27,6 +27,6 @@
     <file src="..\..\icon.png" target="" />
     <file src="..\..\README.md" target="" />
     <file src="bin\Release\net48\UserSecurityRoleTableAccess.dll" target="Plugins" />
-    <file src="bin\Release\net48\app\index.html" target="Plugins\app" />
+    <file src="bin\Release\net48\app\user-access-explorer.html" target="Plugins\app" />
   </files>
 </package>

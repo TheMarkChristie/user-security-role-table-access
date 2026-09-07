@@ -46,7 +46,7 @@ else { Bad "versions disagree: $($v | ConvertTo-Json -Compress); assembly $dll" 
 
 Step 'The one source file reached both hosts'
 $src = Get-FileHash "$root\webresource\prx3_UserSecurityRoleTableAccess.html"
-foreach ($t in @("$proj\app\index.html", "$root\pptb\dist\index.html")) {
+foreach ($t in @("$proj\app\user-access-explorer.html", "$root\pptb\dist\index.html")) {
   # the copies gain a build banner, so compare length rather than hash
   $d = (Get-Item $t).Length - (Get-Item "$root\webresource\prx3_UserSecurityRoleTableAccess.html").Length
   $where = Split-Path (Split-Path $t -Parent) -Leaf
@@ -93,7 +93,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $z = [IO.Compression.ZipFile]::OpenRead((Get-ChildItem "$root\_dist\*.nupkg").FullName)
 $names = $z.Entries.FullName
 $z.Dispose()
-foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/index.html','icon.png','README.md')) {
+foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/user-access-explorer.html','icon.png','README.md')) {
   if ($names -contains $need) { Ok $need } else { Bad "missing from nupkg: $need" }
 }
 
