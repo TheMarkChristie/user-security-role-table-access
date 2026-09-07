@@ -79,7 +79,7 @@ jobs:
           $z = [IO.Compression.ZipFile]::OpenRead($pkg)
           $names = $z.Entries.FullName
           $z.Dispose()
-          foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/index.html','icon.png','README.md')) {
+          foreach ($need in @('Plugins/UserSecurityRoleTableAccess.dll','Plugins/app/user-access-explorer.html','icon.png','README.md')) {
             if ($names -notcontains $need) { throw "missing from nupkg: $need" }
             Write-Host "ok $need"
           }
