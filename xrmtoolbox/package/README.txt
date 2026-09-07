@@ -1,5 +1,5 @@
 ================================================================================
-  USER ACCESS EXPLORER  v1.0.7  --  a tool for XrmToolBox
+  USER ACCESS EXPLORER  v1.0.8  --  a tool for XrmToolBox
   by Mark Christie   https://github.com/TheMarkChristie
 ================================================================================
 
